@@ -1,0 +1,83 @@
+{
+  "mcpServers": {
+    "python-sdk": {
+      "name": "Python SDK",
+      "command": "python",
+      "args": [
+        "-m",
+        "python_sdk.server"
+      ],
+      "env": {}
+    },
+    "docker": {
+      "name": "Docker MCP",
+      "command": "python",
+      "args": [
+        "-m",
+        "mcp_server_docker"
+      ],
+      "env": {}
+    },
+    "jupyter": {
+      "name": "Jupyter MCP",
+      "command": "python",
+      "args": [
+        "-m",
+        "server_jupyter"
+      ],
+      "env": {}
+    },
+    "postgresql": {
+      "name": "PostgreSQL MCP",
+      "command": "python",
+      "args": [
+        "-m",
+        "server_postgres"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://user:pass@host/db"
+      }
+    },
+    "opik": {
+      "name": "Opik MCP",
+      "command": "python",
+      "args": [
+        "-m",
+        "opik_mcp"
+      ],
+      "env": {}
+    },
+    "memory-bank": {
+      "name": "Memory Bank MCP",
+      "command": "server-memory",
+      "args": [],
+      "env": {}
+    },
+    "sequential-thinking": {
+      "name": "Sequential Thinking MCP",
+      "command": "code-reasoning",
+      "args": [],
+      "env": {}
+    },
+    "brave-search": {
+      "name": "Brave Search MCP",
+      "command": "server-brave-search",
+      "args": [],
+      "env": {}
+    },
+    "google-maps": {
+      "name": "Google Maps MCP",
+      "command": "server-google-maps",
+      "args": [],
+      "env": {
+        "GOOGLE_MAPS_API_KEY": "..."
+      }
+    },
+    "deep-graph": {
+      "name": "Deep Graph MCP (Code Graph)",
+      "command": "mcp-code-graph",
+      "args": [],
+      "env": {}
+    }
+  }
+}
