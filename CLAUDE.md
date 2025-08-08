@@ -1,4 +1,8 @@
 # CLAUDE.md
+- 永远用中文和我交流
+- 执行完所有工作后，执行 `afplay /System/Library/Sounds/Sosumi.aiff` 
+- 严禁任何硬编码
+- 执行任务时保证SOTA
 
 本文件为 Claude Code 在此 RAG 项目中工作时提供指导。
 
