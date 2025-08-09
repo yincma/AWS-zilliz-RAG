@@ -1,0 +1,7 @@
+# Development only dependencies
+-r requirements.txt
+
+# Additional dev tools
+jupyter==1.0.0
+notebook==7.1.1
+pre-commit==3.6.2

@@ -1,0 +1,7 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "stage": "dev"
+  }
+}
+EOF < /dev/null

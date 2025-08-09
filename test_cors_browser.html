@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS上传测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1000px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .test-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5a67d8;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-success {
+            background: #28a745;
+        }
+        .status-error {
+            background: #dc3545;
+        }
+        .status-pending {
+            background: #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 CORS文档上传测试</h1>
+        
+        <div class="test-section">
+            <div class="test-title">⚡ 快速测试</div>
+            <button onclick="quickTest()">运行快速测试</button>
+            <button onclick="clearResults()">清空结果</button>
+            <div id="quickResult" class="result" style="display:none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">🔒 CORS预检测试</div>
+            <button onclick="testCorsOptions()">测试OPTIONS请求</button>
+            <div id="corsResult" class="result" style="display:none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">📤 文档上传测试</div>
+            <button onclick="testUpload()">测试POST上传</button>
+            <div id="uploadResult" class="result" style="display:none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">🔧 完整流程测试</div>
+            <input type="file" id="fileInput" accept=".txt,.md,.json">
+            <button onclick="testFullUpload()">测试文件上传</button>
+            <div id="fullResult" class="result" style="display:none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">📊 测试状态</div>
+            <div id="statusBoard">
+                <p><span class="status-indicator status-pending"></span>CORS预检: <span id="corsStatus">未测试</span></p>
+                <p><span class="status-indicator status-pending"></span>POST请求: <span id="postStatus">未测试</span></p>
+                <p><span class="status-indicator status-pending"></span>文件上传: <span id="fileStatus">未测试</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'https://abbrw64qve.execute-api.us-east-1.amazonaws.com/prod';
+        
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.textContent = message;
+        }
+        
+        function updateStatus(statusId, status, success) {
+            const element = document.getElementById(statusId);
+            element.textContent = status;
+            const indicator = element.parentElement.querySelector('.status-indicator');
+            indicator.className = `status-indicator status-${success ? 'success' : 'error'}`;
+        }
+        
+        function clearResults() {
+            document.querySelectorAll('.result').forEach(el => {
+                el.style.display = 'none';
+                el.textContent = '';
+            });
+            document.querySelectorAll('.status-indicator').forEach(el => {
+                el.className = 'status-indicator status-pending';
+            });
+            document.getElementById('corsStatus').textContent = '未测试';
+            document.getElementById('postStatus').textContent = '未测试';
+            document.getElementById('fileStatus').textContent = '未测试';
+        }
+        
+        async function quickTest() {
+            showResult('quickResult', '开始快速测试...', 'info');
+            
+            try {
+                // 直接尝试上传
+                const testData = {
+                    filename: `quick_test_${Date.now()}.txt`,
+                    content: 'Quick CORS test',
+                    content_type: 'text/plain',
+                    size: 15
+                };
+                
+                const response = await fetch(`${API_URL}/documents/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('quickResult', 
+                        `✅ 成功！\n状态码: ${response.status}\nS3 Key: ${data.s3_key || '已上传'}`, 
+                        'success');
+                    updateStatus('postStatus', '正常', true);
+                } else {
+                    showResult('quickResult', 
+                        `❌ 失败\n状态码: ${response.status}\n${await response.text()}`, 
+                        'error');
+                    updateStatus('postStatus', `失败 (${response.status})`, false);
+                }
+            } catch (error) {
+                showResult('quickResult', 
+                    `❌ 错误: ${error.message}\n\n可能是CORS问题`, 
+                    'error');
+                updateStatus('postStatus', 'CORS错误', false);
+            }
+        }
+        
+        async function testCorsOptions() {
+            showResult('corsResult', '测试OPTIONS请求...', 'info');
+            
+            try {
+                const response = await fetch(`${API_URL}/documents/upload`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type'
+                    }
+                });
+                
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                };
+                
+                if (response.ok || response.status === 204) {
+                    showResult('corsResult', 
+                        `✅ CORS预检成功\n状态码: ${response.status}\n\nCORS头:\n${JSON.stringify(corsHeaders, null, 2)}`, 
+                        'success');
+                    updateStatus('corsStatus', '正常', true);
+                } else {
+                    showResult('corsResult', 
+                        `⚠️ CORS预检返回: ${response.status}\n但这可能不影响实际请求\n\nCORS头:\n${JSON.stringify(corsHeaders, null, 2)}`, 
+                        'info');
+                    updateStatus('corsStatus', `${response.status} (可能正常)`, true);
+                }
+            } catch (error) {
+                showResult('corsResult', 
+                    `❌ OPTIONS请求失败: ${error.message}`, 
+                    'error');
+                updateStatus('corsStatus', '失败', false);
+            }
+        }
+        
+        async function testUpload() {
+            showResult('uploadResult', '测试POST上传...', 'info');
+            
+            const testData = {
+                filename: `test_upload_${Date.now()}.txt`,
+                content: 'Test document for CORS verification',
+                content_type: 'text/plain',
+                size: 36
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/documents/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const responseText = await response.text();
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch (e) {
+                    responseData = { message: responseText };
+                }
+                
+                if (response.ok) {
+                    showResult('uploadResult', 
+                        `✅ 上传成功!\n状态码: ${response.status}\n\n响应:\n${JSON.stringify(responseData, null, 2)}`, 
+                        'success');
+                    updateStatus('postStatus', '正常', true);
+                } else {
+                    showResult('uploadResult', 
+                        `❌ 上传失败\n状态码: ${response.status}\n\n响应:\n${JSON.stringify(responseData, null, 2)}`, 
+                        'error');
+                    updateStatus('postStatus', `失败 (${response.status})`, false);
+                }
+            } catch (error) {
+                showResult('uploadResult', 
+                    `❌ 请求错误: ${error.message}\n\n详细信息:\n${error.stack}`, 
+                    'error');
+                updateStatus('postStatus', 'CORS错误', false);
+            }
+        }
+        
+        async function testFullUpload() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files.length) {
+                showResult('fullResult', '请先选择一个文件', 'error');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            showResult('fullResult', `上传文件: ${file.name}...`, 'info');
+            
+            const reader = new FileReader();
+            
+            reader.onload = async (e) => {
+                const uploadData = {
+                    filename: file.name,
+                    content: e.target.result,
+                    content_type: file.type || 'text/plain',
+                    size: file.size
+                };
+                
+                try {
+                    const response = await fetch(`${API_URL}/documents/upload`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(uploadData)
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        showResult('fullResult', 
+                            `✅ 文件上传成功!\n文件名: ${file.name}\n大小: ${file.size} bytes\nS3 Key: ${data.s3_key || '已上传'}`, 
+                            'success');
+                        updateStatus('fileStatus', '成功', true);
+                    } else {
+                        showResult('fullResult', 
+                            `❌ 文件上传失败\n状态码: ${response.status}\n${await response.text()}`, 
+                            'error');
+                        updateStatus('fileStatus', `失败 (${response.status})`, false);
+                    }
+                } catch (error) {
+                    showResult('fullResult', 
+                        `❌ 上传错误: ${error.message}`, 
+                        'error');
+                    updateStatus('fileStatus', 'CORS错误', false);
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // 页面加载时自动运行快速测试
+        window.onload = function() {
+            console.log('CORS测试页面已加载');
+            console.log('API端点:', API_URL);
+        };
+    </script>
+</body>
+</html>

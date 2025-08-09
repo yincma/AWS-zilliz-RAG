@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滚动测试页面</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .long-content {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        
+        .scroll-test {
+            height: 300px;
+            overflow-y: auto;
+            border: 2px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            background: white;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #5a67d8;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎯 页面滚动功能测试</h1>
+        
+        <div class="test-section">
+            <h2>当前滚动状态</h2>
+            <div id="scrollStatus" class="status info">
+                等待检测...
+            </div>
+            <div class="button-group">
+                <button onclick="checkScroll()">检测滚动状态</button>
+                <button onclick="testPageScroll()">测试页面滚动</button>
+                <button onclick="scrollToBottom()">滚动到底部</button>
+                <button onclick="scrollToTop()">滚动到顶部</button>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>页面滚动测试内容</h2>
+            <p>这是一个长页面，用于测试页面是否可以正常向下滚动。</p>
+            
+            <div class="long-content">
+                <h3>内容块 1</h3>
+                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+            </div>
+            
+            <div class="long-content">
+                <h3>内容块 2</h3>
+                <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+                <p>Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>内部滚动区域测试</h2>
+            <div class="scroll-test" id="innerScroll">
+                <h3>这是一个可滚动的内部区域</h3>
+                <p>行 1: 测试内容</p>
+                <p>行 2: 测试内容</p>
+                <p>行 3: 测试内容</p>
+                <p>行 4: 测试内容</p>
+                <p>行 5: 测试内容</p>
+                <p>行 6: 测试内容</p>
+                <p>行 7: 测试内容</p>
+                <p>行 8: 测试内容</p>
+                <p>行 9: 测试内容</p>
+                <p>行 10: 测试内容</p>
+                <p>行 11: 测试内容</p>
+                <p>行 12: 测试内容</p>
+                <p>行 13: 测试内容</p>
+                <p>行 14: 测试内容</p>
+                <p>行 15: 测试内容</p>
+                <p>行 16: 测试内容</p>
+                <p>行 17: 测试内容</p>
+                <p>行 18: 测试内容</p>
+                <p>行 19: 测试内容</p>
+                <p>行 20: 测试内容</p>
+            </div>
+        </div>
+        
+        <!-- 添加更多内容以确保页面足够长 -->
+        <div class="test-section">
+            <h2>额外内容区域</h2>
+            <div class="long-content">
+                <h3>内容块 3</h3>
+                <p>这里是更多的内容，用于确保页面有足够的高度来测试滚动功能。</p>
+                <p>当页面内容超过视窗高度时，应该能够正常向下滚动。</p>
+            </div>
+            
+            <div class="long-content">
+                <h3>内容块 4</h3>
+                <p>继续添加内容以增加页面高度。</p>
+                <p>测试在不同分辨率和设备上的滚动表现。</p>
+            </div>
+            
+            <div class="long-content">
+                <h3>内容块 5</h3>
+                <p>更多测试内容。</p>
+                <p>确保滚动条正常显示和工作。</p>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>滚动信息</h2>
+            <div id="scrollInfo" style="font-family: monospace; background: #f4f4f4; padding: 10px; border-radius: 6px;">
+                等待检测...
+            </div>
+        </div>
+        
+        <div style="height: 500px; background: linear-gradient(to bottom, #f0f0f0, #e0e0e0); display: flex; align-items: center; justify-content: center; margin: 30px 0; border-radius: 8px;">
+            <h2 style="color: #666;">这是页面底部区域</h2>
+        </div>
+    </div>
+    
+    <script>
+        // 检测滚动状态
+        function checkScroll() {
+            const status = document.getElementById('scrollStatus');
+            const info = document.getElementById('scrollInfo');
+            
+            // 检测body和documentElement的滚动
+            const bodyScrollable = document.body.scrollHeight > window.innerHeight;
+            const htmlScrollable = document.documentElement.scrollHeight > window.innerHeight;
+            const currentScrollY = window.scrollY || window.pageYOffset;
+            const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+            
+            const scrollData = {
+                '页面高度': document.documentElement.scrollHeight + 'px',
+                '视窗高度': window.innerHeight + 'px',
+                '当前滚动位置': currentScrollY + 'px',
+                '最大滚动距离': maxScroll + 'px',
+                'Body可滚动': bodyScrollable ? '是' : '否',
+                'HTML可滚动': htmlScrollable ? '是' : '否',
+                'Body overflow-y': window.getComputedStyle(document.body).overflowY,
+                'HTML overflow-y': window.getComputedStyle(document.documentElement).overflowY
+            };
+            
+            info.innerHTML = Object.entries(scrollData)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n');
+            
+            if (bodyScrollable || htmlScrollable) {
+                status.className = 'status success';
+                status.textContent = '✅ 页面可以正常滚动';
+            } else {
+                status.className = 'status error';
+                status.textContent = '❌ 页面无法滚动（内容不够长或被CSS阻止）';
+            }
+        }
+        
+        // 测试页面滚动
+        function testPageScroll() {
+            window.scrollTo({
+                top: 200,
+                behavior: 'smooth'
+            });
+            
+            setTimeout(() => {
+                if (window.scrollY > 0) {
+                    alert('✅ 滚动测试成功！页面已滚动到 ' + window.scrollY + 'px');
+                } else {
+                    alert('❌ 滚动测试失败！页面无法滚动');
+                }
+                checkScroll();
+            }, 500);
+        }
+        
+        // 滚动到底部
+        function scrollToBottom() {
+            window.scrollTo({
+                top: document.documentElement.scrollHeight,
+                behavior: 'smooth'
+            });
+            setTimeout(checkScroll, 500);
+        }
+        
+        // 滚动到顶部
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+            setTimeout(checkScroll, 500);
+        }
+        
+        // 监听滚动事件
+        window.addEventListener('scroll', () => {
+            const info = document.getElementById('scrollInfo');
+            const scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100).toFixed(1);
+            
+            const lastLine = `实时滚动进度: ${scrollPercent}%`;
+            const lines = info.textContent.split('\n');
+            if (lines[lines.length - 1].startsWith('实时滚动进度')) {
+                lines[lines.length - 1] = lastLine;
+            } else {
+                lines.push(lastLine);
+            }
+            info.textContent = lines.join('\n');
+        });
+        
+        // 页面加载时检测
+        window.onload = () => {
+            checkScroll();
+            
+            // 测试内部滚动区域
+            const innerScroll = document.getElementById('innerScroll');
+            innerScroll.addEventListener('scroll', () => {
+                console.log('内部区域滚动位置:', innerScroll.scrollTop);
+            });
+        };
+    </script>
+</body>
+</html>

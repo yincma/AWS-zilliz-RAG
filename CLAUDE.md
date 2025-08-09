@@ -1,4 +1,5 @@
 # CLAUDE.md
+- 本系统内语言完全为英语
 - 永远用中文和我交流
 - 执行完所有工作后，执行 `afplay /System/Library/Sounds/Sosumi.aiff` 
 - 严禁任何硬编码
@@ -63,8 +64,7 @@
 │   └── integration/ # 集成测试
 │
 ├── scripts/         # 实用脚本
-│   ├── deploy.py   # 部署脚本
-│   └── migrate.py  # 数据迁移
+│   └── deploy.py   # 部署脚本
 │
 └── docs/           # 文档
 ```

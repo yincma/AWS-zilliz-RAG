@@ -1,0 +1,106 @@
+{
+  "timestamp": "2025-08-09T17:16:20.208387",
+  "mode": "local",
+  "tests": [
+    {
+      "name": "API健康检查",
+      "status": "passed",
+      "message": "健康检查通过 - 状态: healthy",
+      "duration": 0.01,
+      "details": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "uptime": 16351.530945777893,
+        "environment": "development"
+      }
+    },
+    {
+      "name": "AWS服务连接",
+      "status": "passed",
+      "message": "AWS服务测试 - S3: ✅, Bedrock: ✅",
+      "duration": 1.08,
+      "details": {
+        "s3": true,
+        "bedrock": true,
+        "details": {
+          "s3": "S3连接成功",
+          "bedrock": "Bedrock连接成功"
+        }
+      }
+    },
+    {
+      "name": "Zilliz向量数据库连接",
+      "status": "passed",
+      "message": "Zilliz连接成功 - Collection: rag_collection",
+      "duration": 1.98,
+      "details": {
+        "exists": true,
+        "name": "rag_collection"
+      }
+    },
+    {
+      "name": "Embedding向量生成",
+      "status": "passed",
+      "message": "向量生成成功 - 维度: 1024",
+      "duration": 0.9,
+      "details": {
+        "dimension": 1024,
+        "model": "amazon.titan-embed-image-v1"
+      }
+    },
+    {
+      "name": "LLM文本生成",
+      "status": "passed",
+      "message": "LLM生成成功 - 长度: 484字符",
+      "duration": 3.36,
+      "details": {
+        "model": "amazon.nova-pro-v1:0",
+        "response_length": 484,
+        "sample": "{'output': {'message': {'content': [{'text': 'RAG（Retrieval-Augmented Generation）系统是一种结合了信息检索和文本生成技术..."
+      }
+    },
+    {
+      "name": "文档上传功能",
+      "status": "failed",
+      "message": "文档上传失败 - 状态码: 404",
+      "duration": 0.0,
+      "details": {
+        "status_code": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      }
+    },
+    {
+      "name": "RAG查询功能",
+      "status": "failed",
+      "message": "RAG查询失败 - 状态码: 404",
+      "duration": 0.0,
+      "details": {
+        "status_code": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      }
+    },
+    {
+      "name": "系统性能测试",
+      "status": "passed",
+      "message": "性能测试 - 平均延迟: 3.12ms (优秀)",
+      "duration": 0.02,
+      "details": {
+        "latency_samples": [
+          3.22,
+          3.24,
+          3.05,
+          2.5,
+          3.57
+        ],
+        "avg_latency_ms": 3.12,
+        "performance_rating": "优秀"
+      }
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 6,
+    "failed": 2,
+    "skipped": 0
+  }
+}

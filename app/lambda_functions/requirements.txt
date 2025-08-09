@@ -1,0 +1,5 @@
+# Lambda函数依赖
+boto3>=1.34.0
+botocore>=1.34.0
+pymilvus==2.3.0
+requests>=2.31.0

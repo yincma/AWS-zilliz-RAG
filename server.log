@@ -1,0 +1,29 @@
+INFO:botocore.credentials:Found credentials in shared credentials file: ~/.aws/credentials
+INFO:     Started server process [15757]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Starting RAG API Local Server...
+Server will run on: http://localhost:8000
+API Documentation: http://localhost:8000/docs
+
+Press Ctrl+C to stop the server
+INFO:     127.0.0.1:54335 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "POST /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "POST /documents/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "DELETE /documents/test_doc.txt HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "DELETE /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54335 - "OPTIONS /documents HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:54410 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54410 - "POST /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54410 - "POST /documents/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54410 - "POST /documents/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54410 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54410 - "DELETE /documents/rag_knowledge.txt HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [15757]

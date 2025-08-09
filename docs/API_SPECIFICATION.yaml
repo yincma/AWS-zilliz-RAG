@@ -1,0 +1,862 @@
+openapi: 3.0.0
+info:
+  title: AWS-Zilliz RAG API
+  description: Enterprise RAG System API Specification
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@example.com
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+  - url: https://staging-api.example.com/v1
+    description: Staging server
+  - url: http://localhost:8000/v1
+    description: Development server
+
+tags:
+  - name: Query
+    description: RAG query operations
+  - name: Documents
+    description: Document management operations
+  - name: Search
+    description: Search operations
+  - name: Health
+    description: System health and monitoring
+
+paths:
+  /query:
+    post:
+      tags:
+        - Query
+      summary: Process RAG query
+      description: Submit a natural language query for RAG processing
+      operationId: processQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Successful query response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /query/stream:
+    post:
+      tags:
+        - Query
+      summary: Process RAG query with streaming
+      description: Submit a query and receive streaming response
+      operationId: processQueryStream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Streaming response
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                format: binary
+
+  /documents:
+    get:
+      tags:
+        - Documents
+      summary: List documents
+      description: Retrieve a paginated list of documents
+      operationId: listDocuments
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, updated_at, title]
+            default: created_at
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [pdf, txt, html, docx]
+      responses:
+        '200':
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Documents
+      summary: Upload document
+      description: Upload a new document for processing
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                metadata:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    description:
+                      type: string
+                    tags:
+                      type: array
+                      items:
+                        type: string
+              required:
+                - file
+      responses:
+        '201':
+          description: Document uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          description: File too large
+        '415':
+          description: Unsupported media type
+
+  /documents/{documentId}:
+    get:
+      tags:
+        - Documents
+      summary: Get document details
+      description: Retrieve details of a specific document
+      operationId: getDocument
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Documents
+      summary: Update document
+      description: Update document metadata or content
+      operationId: updateDocument
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUpdateRequest'
+      responses:
+        '200':
+          description: Document updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Documents
+      summary: Delete document
+      description: Delete a document and its embeddings
+      operationId: deleteDocument
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Document deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /documents/{documentId}/chunks:
+    get:
+      tags:
+        - Documents
+      summary: Get document chunks
+      description: Retrieve processed chunks of a document
+      operationId: getDocumentChunks
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Document chunks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChunkListResponse'
+
+  /search:
+    post:
+      tags:
+        - Search
+      summary: Semantic search
+      description: Perform semantic search across documents
+      operationId: semanticSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /search/advanced:
+    post:
+      tags:
+        - Search
+      summary: Advanced search
+      description: Perform hybrid search with multiple strategies
+      operationId: advancedSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvancedSearchRequest'
+      responses:
+        '200':
+          description: Advanced search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvancedSearchResponse'
+
+  /search/similar/{documentId}:
+    get:
+      tags:
+        - Search
+      summary: Find similar documents
+      description: Find documents similar to a given document
+      operationId: findSimilarDocuments
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: top_k
+          in: query
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Similar documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /feedback:
+    post:
+      tags:
+        - Query
+      summary: Submit feedback
+      description: Submit user feedback for a query response
+      operationId: submitFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '201':
+          description: Feedback submitted successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check system health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /metrics:
+    get:
+      tags:
+        - Health
+      summary: Get metrics
+      description: Retrieve system performance metrics
+      operationId: getMetrics
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1h, 6h, 24h, 7d, 30d]
+            default: 24h
+      responses:
+        '200':
+          description: System metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+components:
+  schemas:
+    QueryRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Natural language query
+          minLength: 1
+          maxLength: 2000
+        top_k:
+          type: integer
+          description: Number of documents to retrieve
+          default: 5
+          minimum: 1
+          maximum: 20
+        filters:
+          type: object
+          properties:
+            date_range:
+              type: array
+              items:
+                type: string
+                format: date
+              minItems: 2
+              maxItems: 2
+            document_type:
+              type: array
+              items:
+                type: string
+                enum: [pdf, txt, html, docx]
+            tags:
+              type: array
+              items:
+                type: string
+        include_sources:
+          type: boolean
+          description: Include source documents in response
+          default: true
+        temperature:
+          type: number
+          description: LLM temperature parameter
+          default: 0.7
+          minimum: 0
+          maximum: 1
+        max_tokens:
+          type: integer
+          description: Maximum tokens in response
+          default: 2048
+          minimum: 100
+          maximum: 4096
+
+    QueryResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: Generated answer
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Source'
+        confidence:
+          type: number
+          description: Confidence score
+          minimum: 0
+          maximum: 1
+        metadata:
+          type: object
+          properties:
+            processing_time:
+              type: number
+              description: Processing time in milliseconds
+            model_used:
+              type: string
+            tokens_used:
+              type: integer
+
+    Source:
+      type: object
+      properties:
+        document_id:
+          type: string
+        document_title:
+          type: string
+        content:
+          type: string
+          description: Relevant content excerpt
+        score:
+          type: number
+          description: Relevance score
+          minimum: 0
+          maximum: 1
+        page:
+          type: integer
+          description: Page number (if applicable)
+        metadata:
+          type: object
+          additionalProperties: true
+
+    DocumentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+          enum: [pdf, txt, html, docx]
+        size:
+          type: integer
+          description: File size in bytes
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        chunks_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+
+    DocumentListResponse:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentResponse'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    DocumentUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        tags:
+          type: array
+          items:
+            type: string
+
+    ChunkListResponse:
+      type: object
+      properties:
+        chunks:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              content:
+                type: string
+              position:
+                type: integer
+              metadata:
+                type: object
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        top_k:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 100
+        score_threshold:
+          type: number
+          description: Minimum similarity score
+          default: 0.5
+          minimum: 0
+          maximum: 1
+        filters:
+          type: object
+          additionalProperties: true
+
+    SearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              document_id:
+                type: string
+              title:
+                type: string
+              content:
+                type: string
+              score:
+                type: number
+              metadata:
+                type: object
+        total:
+          type: integer
+        processing_time:
+          type: number
+
+    AdvancedSearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        strategies:
+          type: array
+          items:
+            type: string
+            enum: [semantic, keyword, hybrid]
+          default: [hybrid]
+        weights:
+          type: object
+          properties:
+            semantic:
+              type: number
+              default: 0.7
+            keyword:
+              type: number
+              default: 0.3
+        top_k:
+          type: integer
+          default: 10
+        rerank:
+          type: boolean
+          default: true
+
+    AdvancedSearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              document_id:
+                type: string
+              title:
+                type: string
+              content:
+                type: string
+              scores:
+                type: object
+                properties:
+                  semantic:
+                    type: number
+                  keyword:
+                    type: number
+                  combined:
+                    type: number
+              metadata:
+                type: object
+        strategy_results:
+          type: object
+          additionalProperties:
+            type: integer
+
+    FeedbackRequest:
+      type: object
+      required:
+        - query_id
+        - rating
+      properties:
+        query_id:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          maxLength: 1000
+        helpful:
+          type: boolean
+        improvements:
+          type: array
+          items:
+            type: string
+            enum: [accuracy, relevance, completeness, clarity]
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        services:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [up, down]
+            vector_store:
+              type: string
+              enum: [up, down]
+            llm:
+              type: string
+              enum: [up, down]
+            storage:
+              type: string
+              enum: [up, down]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    MetricsResponse:
+      type: object
+      properties:
+        period:
+          type: string
+        metrics:
+          type: object
+          properties:
+            queries:
+              type: object
+              properties:
+                total:
+                  type: integer
+                success_rate:
+                  type: number
+                avg_latency:
+                  type: number
+                p95_latency:
+                  type: number
+                p99_latency:
+                  type: number
+            documents:
+              type: object
+              properties:
+                total:
+                  type: integer
+                processed:
+                  type: integer
+                failed:
+                  type: integer
+                avg_processing_time:
+                  type: number
+            system:
+              type: object
+              properties:
+                cpu_usage:
+                  type: number
+                memory_usage:
+                  type: number
+                storage_usage:
+                  type: number
+                active_users:
+                  type: integer
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    TooManyRequests:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    
+    AWS_IAM:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: AWS Signature Version 4
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+  - AWS_IAM: []

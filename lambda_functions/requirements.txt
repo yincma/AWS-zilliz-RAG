@@ -1,0 +1,9 @@
+# Lambda函数依赖
+boto3>=1.26.0
+pymilvus>=2.3.0
+langchain>=0.1.0
+langchain-community>=0.0.10
+pypdf>=3.17.0
+unstructured>=0.10.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0

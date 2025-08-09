@@ -1,0 +1,1 @@
+{"statusCode": 200, "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}, "body": "{\"answer\": \"\\u65e0\\u6cd5\\u751f\\u6210\\u56de\\u7b54\", \"query\": \"What is RAG?\", \"status\": \"success\"}"}
