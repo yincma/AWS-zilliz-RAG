@@ -1,0 +1,135 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+**/venv/
+
+# Large files and directories
+lambda_functions/milvus_lite/
+SuperClaude_Framework/
+infrastructure/infrastructure/venv/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# AWS CDK
+cdk.out/
+.cdk.staging
+.cdk.outputs
+
+# Lambda packages
+lambda_deployment.zip
+function.zip
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+*.pid
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+coverage.xml
+*.cover
+test-reports/
+screenshots/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+payload.txt
+response.json
+uploads/
+
+# Test files
+test_*.py
+test_*.html
+test_*.js
+*_test_*.json
+*_REPORT.md
+*_SUMMARY.md
+*_GUIDE.md
+*_ANALYSIS.md
+*_STATUS.md
+*_ISSUE*.md
+
+# Shell scripts (dev only)
+*.sh
+!start_server.sh
+!stop_server.sh
+
+# HTML test files
+debug_*.html
+frontend.html
+test_*.html
+cloudfront_test_viewer.html
+
+# Python test scripts
+local_api_server.py
+generate_test_report.py
+check_stack_resources.py
+fix_*.py
+
+# JavaScript test files
+browser_*.js
+test_*.js
+
+# Node (if any frontend build)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json

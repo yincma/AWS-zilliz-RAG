@@ -1,0 +1,9 @@
+{
+  "aws_account": "375004070918",
+  "aws_region": "us-east-1",
+  "stage": "prod",
+  "acknowledged-issue-numbers": [
+    34892,
+    34892
+  ]
+}

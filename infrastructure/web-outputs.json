@@ -1,0 +1,8 @@
+{
+  "RAG-Web-prod": {
+    "CloudFrontURL": "https://d38wib0z82sj5v.cloudfront.net",
+    "OAIId": "3ef28627a8162d7944502d352759e9e070856d11d2a3d9608bc748a26a249f82f5b46f2f0d0fb075b5cdf8a0f15478c9",
+    "CloudFrontDistributionId": "E21VGHQLHXZQVR",
+    "S3BucketName": "rag-web-375004070918-us-east-1"
+  }
+}

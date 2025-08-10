@@ -1,0 +1,21 @@
+# Minimal requirements for Lambda - excludes AWS SDK and heavy dependencies
+# AWS SDK (boto3, botocore) are already in Lambda runtime - DO NOT INCLUDE
+
+# Core RAG dependencies only
+langchain-core>=0.1.0
+langchain-aws>=0.1.0
+
+# Zilliz/Milvus client (lightweight)
+pymilvus>=2.3.0
+
+# Essential utilities only
+pydantic>=2.0.0
+
+# DO NOT INCLUDE:
+# - boto3 (already in Lambda runtime)
+# - botocore (already in Lambda runtime)
+# - numpy (too large, not needed for basic RAG)
+# - pandas (too large, not needed)
+# - scipy (too large, not needed)
+# - langchain (full package too large, use langchain-core)
+# - langchain-community (too large, includes many integrations)

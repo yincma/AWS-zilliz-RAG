@@ -1,0 +1,13 @@
+Bootstrap信息
+==============
+日期: Sun Aug 10 17:35:28 JST 2025
+账号ID: 375004070918
+区域: us-east-1
+用户: arn:aws:iam::375004070918:root
+Bootstrap栈: CDKToolkit
+Bootstrap桶: cdk-hnb659fds-assets-375004070918-us-east-1
+阶段: prod
+
+下一步:
+1. 运行部署: make deploy
+2. 或: ./deploy_fixed.sh

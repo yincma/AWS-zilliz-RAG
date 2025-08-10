@@ -1,0 +1,1 @@
+{"statusCode": 200, "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}, "body": "{\"message\": \"Document added successfully\", \"content_length\": 240, \"metadata\": {\"source\": \"AWS Documentation\"}}"}
