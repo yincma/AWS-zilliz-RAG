@@ -157,7 +157,7 @@ def handler(event, context):
             rest_api_name=f"rag-api-{self.node.try_get_context('stage')}",
             description="RAG应用API",
             deploy_options=apigateway.StageOptions(
-                stage_name=self.node.try_get_context('stage') or 'dev',
+                stage_name=self.node.try_get_context('stage') or 'prod',  # 统一默认使用prod
                 logging_level=apigateway.MethodLoggingLevel.INFO,
                 data_trace_enabled=True,
                 metrics_enabled=True,
@@ -167,7 +167,8 @@ def handler(event, context):
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=apigateway.Cors.ALL_ORIGINS,
                 allow_methods=apigateway.Cors.ALL_METHODS,
-                allow_headers=["*"]
+                allow_headers=["*"],
+                allow_credentials=False
             )
         )
         
@@ -183,25 +184,66 @@ def handler(event, context):
         
         # 查询端点
         query = self.api.root.add_resource("query")
+        
+        # 添加POST方法，包含CORS响应头
         query.add_method(
             "POST",
             apigateway.LambdaIntegration(
                 query_function,
-                timeout=Duration.seconds(29)
+                timeout=Duration.seconds(29),
+                # 确保Lambda代理集成传递所有请求信息
+                proxy=True,
+                integration_responses=[
+                    apigateway.IntegrationResponse(
+                        status_code="200",
+                        response_parameters={
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        }
+                    )
+                ]
             ),
-            authorization_type=apigateway.AuthorizationType.NONE
+            authorization_type=apigateway.AuthorizationType.NONE,
+            method_responses=[
+                apigateway.MethodResponse(
+                    status_code="200",
+                    response_parameters={
+                        "method.response.header.Access-Control-Allow-Origin": True
+                    }
+                )
+            ]
         )
+        
         
         # 文档端点
         documents = self.api.root.add_resource("documents")
+        
+        # 添加POST方法，包含CORS响应头
         documents.add_method(
             "POST",
             apigateway.LambdaIntegration(
                 ingest_function,
-                timeout=Duration.seconds(29)
+                timeout=Duration.seconds(29),
+                proxy=True,
+                integration_responses=[
+                    apigateway.IntegrationResponse(
+                        status_code="200",
+                        response_parameters={
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        }
+                    )
+                ]
             ),
-            authorization_type=apigateway.AuthorizationType.NONE
+            authorization_type=apigateway.AuthorizationType.NONE,
+            method_responses=[
+                apigateway.MethodResponse(
+                    status_code="200",
+                    response_parameters={
+                        "method.response.header.Access-Control-Allow-Origin": True
+                    }
+                )
+            ]
         )
+        
         
         # 输出
         CfnOutput(

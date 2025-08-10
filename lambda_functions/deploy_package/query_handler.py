@@ -179,7 +179,10 @@ class RAGHandler:
                 
             elif "claude" in self.model_id.lower():
                 # Claude format
-                formatted_prompt = f"\n\nHuman: {prompt if not context else f'Context: {context}\\n\\nQuestion: {prompt}'}\n\nAssistant:"
+                if context:
+                    formatted_prompt = f"\n\nHuman: Context: {context}\n\nQuestion: {prompt}\n\nAssistant:"
+                else:
+                    formatted_prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
                 request_body = {
                     "prompt": formatted_prompt,
                     "max_tokens_to_sample": 1000,
@@ -287,7 +290,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Lambda handler for RAG queries
     """
     try:
-        # Parse request body
+        # Handle OPTIONS request for CORS preflight
+        http_method = event.get('httpMethod', event.get('requestContext', {}).get('http', {}).get('method', 'POST'))
+        
+        if http_method == 'OPTIONS':
+            logger.info("Handling OPTIONS preflight request")
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+                    "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+                    "Content-Type": "application/json"
+                },
+                "body": json.dumps({"message": "CORS preflight successful"})
+            }
+        
+        # Parse request body for POST requests
         if event.get('body'):
             if isinstance(event['body'], str):
                 body = json.loads(event['body'])

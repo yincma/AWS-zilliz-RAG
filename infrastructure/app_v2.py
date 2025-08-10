@@ -4,7 +4,25 @@ AWS CDK应用入口 V2 - 使用改进的栈
 """
 
 import os
+from pathlib import Path
 from aws_cdk import App, Environment, Tags
+
+# 自动加载.env文件
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+        print(f"✅ 已加载.env配置: {env_path}")
+        # 验证关键配置
+        if os.environ.get('ZILLIZ_ENDPOINT'):
+            print(f"  Zilliz Endpoint: {os.environ.get('ZILLIZ_ENDPOINT')[:50]}...")
+        if os.environ.get('ZILLIZ_TOKEN'):
+            print(f"  Zilliz Token: ***已配置***")
+        if os.environ.get('BEDROCK_MODEL_ID'):
+            print(f"  Bedrock Model: {os.environ.get('BEDROCK_MODEL_ID')}")
+except ImportError:
+    print("⚠️ python-dotenv未安装，跳过.env加载")
 
 # 动态导入，支持选择不同版本的栈
 USE_V2 = os.environ.get('USE_API_V2', 'true').lower() == 'true'

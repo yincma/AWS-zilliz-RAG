@@ -1,105 +1,24 @@
-// 自动配置API客户端 - 无硬编码，自动获取配置
+// 自动生成的API配置文件
+// 生成时间: 2025-08-11T00:38:44.897781
+// 注意: 此文件由部署脚本自动生成，请勿手动修改
+
 class RAGApiClient {
     constructor() {
-        this.baseUrl = null;
-        this.initialized = false;
-        this.initPromise = this.initialize();
-    }
-
-    async initialize() {
-        try {
-            // 1. 尝试从运行时配置文件加载
-            try {
-                const configResponse = await fetch('/static/js/runtime-config.json');
-                if (configResponse.ok) {
-                    const config = await configResponse.json();
-                    if (config.apiUrl) {
-                        this.baseUrl = config.apiUrl.replace(/\/$/, ''); // 去掉尾部斜杠
-                        console.log('Loaded API URL from runtime config:', this.baseUrl);
-                        this.initialized = true;
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.log('Runtime config not available');
-            }
-
-            // 2. 尝试从meta标签获取
-            const metaApiUrl = document.querySelector('meta[name="api-url"]');
-            if (metaApiUrl && metaApiUrl.content) {
-                this.baseUrl = metaApiUrl.content.replace(/\/$/, '');
-                console.log('Loaded API URL from meta tag:', this.baseUrl);
-                this.initialized = true;
-                return;
-            }
-
-            // 3. 尝试从环境检测
-            if (window.location.hostname === 'localhost') {
-                this.baseUrl = 'http://localhost:8000';
-            } else {
-                // 尝试从API Gateway模式推断
-                // 通常CloudFront URL会包含这些模式
-                if (window.location.hostname.includes('cloudfront.net')) {
-                    // 尝试通过健康检查探测API
-                    await this.probeApiEndpoints();
-                } else {
-                    // 使用相对路径，假设通过代理
-                    this.baseUrl = '';
-                }
-            }
-
-            this.initialized = true;
-            console.log('API Client initialized with baseUrl:', this.baseUrl || 'relative path');
-
-        } catch (error) {
-            console.error('Failed to initialize API client:', error);
-            this.baseUrl = '';
-            this.initialized = true;
-        }
-    }
-
-    async probeApiEndpoints() {
-        // 尝试常见的API Gateway模式
-        const patterns = [
-            'https://*.execute-api.*.amazonaws.com/prod',
-            'https://*.execute-api.*.amazonaws.com/dev',
-            '/api',
-            ''
-        ];
-
-        // 这里可以实现更复杂的探测逻辑
-        // 暂时使用空路径，通过相对路径访问
-        this.baseUrl = '';
-    }
-
-    async ensureInitialized() {
-        if (!this.initialized) {
-            await this.initPromise;
-        }
-    }
-
-    // 构建URL的辅助方法（防止双斜杠）
-    buildUrl(path) {
-        // 确保path以斜杠开头
-        if (!path.startsWith('/')) {
-            path = '/' + path;
+        // 根据环境设置基础URL
+        if (window.location.hostname === 'localhost') {
+            this.baseUrl = 'http://localhost:8000';
+        } else {
+            // 生产环境 - 使用API Gateway URL
+            this.baseUrl = 'https://lgauddjrh2.execute-api.us-east-1.amazonaws.com/prod';
         }
         
-        // 如果baseUrl为空，返回相对路径
-        if (!this.baseUrl) {
-            return path;
-        }
-        
-        // 确保没有双斜杠
-        return this.baseUrl + path;
+        console.log('API Client initialized with baseUrl:', this.baseUrl);
     }
 
     // 健康检查
     async checkHealth() {
-        await this.ensureInitialized();
         try {
-            const url = this.buildUrl('/health');
-            const response = await fetch(url, {
+            const response = await fetch(`${this.baseUrl}/health`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json'
@@ -118,9 +37,8 @@ class RAGApiClient {
 
     // 查询
     async query(question, topK = 5, useRag = true) {
-        await this.ensureInitialized();
         try {
-            const url = this.buildUrl('/query');
+            const url = `${this.baseUrl}/query`;
             console.log('Sending query to:', url);
             
             const response = await fetch(url, {
@@ -141,22 +59,17 @@ class RAGApiClient {
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
             
-            const data = await response.json();
-            console.log('Query response received:', data);
-            return data;
+            return await response.json();
         } catch (error) {
             console.error('Query failed:', error);
             throw error;
         }
     }
 
-    // 文档摄入
+    // 文档管理
     async ingestDocuments(filePaths) {
-        await this.ensureInitialized();
         try {
-            const url = this.buildUrl('/documents');
-            console.log('Ingesting documents at:', url);
-            
+            const url = `${this.baseUrl}/documents`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -180,44 +93,9 @@ class RAGApiClient {
         }
     }
 
-    // 获取统计信息（优雅降级）
-    async getStats() {
-        await this.ensureInitialized();
-        try {
-            const url = this.buildUrl('/stats');
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                // 静默失败，返回默认值
-                return {
-                    documents: 0,
-                    vectors: 0,
-                    dimension: 1536,
-                    collection: 'rag_collection'
-                };
-            }
-            
-            return await response.json();
-        } catch (error) {
-            // 静默失败，返回默认值
-            return {
-                documents: 0,
-                vectors: 0,
-                dimension: 1536,
-                collection: 'rag_collection'
-            };
-        }
-    }
-
-    // 列出文档（优雅降级）
     async listDocuments() {
-        await this.ensureInitialized();
         try {
-            const url = this.buildUrl('/documents');
+            const url = `${this.baseUrl}/documents`;
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
@@ -231,15 +109,46 @@ class RAGApiClient {
             
             return await response.json();
         } catch (error) {
+            console.log('Documents endpoint not available');
             return { documents: [] };
         }
     }
 
-    // 向量搜索（带降级）
-    async search(query, topK = 10) {
-        await this.ensureInitialized();
+    // 统计信息
+    async getStats() {
         try {
-            const url = this.buildUrl('/search');
+            const url = `${this.baseUrl}/stats`;
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                return {
+                    documents: 0,
+                    vectors: 0,
+                    dimension: 1536,
+                    collection: 'rag_collection'
+                };
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.log('Stats endpoint not available, using defaults');
+            return {
+                documents: 0,
+                vectors: 0,
+                dimension: 1536,
+                collection: 'rag_collection'
+            };
+        }
+    }
+
+    // 搜索
+    async search(query, topK = 10) {
+        try {
+            const url = `${this.baseUrl}/search`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -259,83 +168,56 @@ class RAGApiClient {
             
             return await response.json();
         } catch (error) {
-            // 降级到查询端点
+            console.error('Search failed, falling back to query:', error);
             return this.query(query, topK, true);
         }
     }
-
-    // 删除文档
-    async deleteDocument(filename) {
-        await this.ensureInitialized();
+    
+    // 文档上传
+    async uploadDocument(uploadData) {
         try {
-            const url = this.buildUrl(`/documents/${filename}`);
-            const response = await fetch(url, {
-                method: 'DELETE',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
+            const url = `${this.baseUrl}/documents`;
+            console.log('Uploading document to:', url);
             
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            // 准备请求体
+            const requestBody = {
+                content: uploadData.content,
+                filename: uploadData.filename,
+                content_type: uploadData.content_type || 'text/plain'
+            };
+            
+            // 如果内容是base64编码的（对于二进制文件）
+            if (uploadData.content && uploadData.content.startsWith('data:')) {
+                const base64Content = uploadData.content.split(',')[1];
+                requestBody.file_content = base64Content;
+                requestBody.content = ''; // 清空content字段
             }
             
-            return await response.json();
-        } catch (error) {
-            console.error('Delete document failed:', error);
-            throw error;
-        }
-    }
-
-    // 上传文档
-    async uploadDocument(uploadData) {
-        await this.ensureInitialized();
-        try {
-            const url = this.buildUrl('/documents');
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({
-                    file_paths: [uploadData.filename],
-                    content: uploadData.content
-                })
+                body: JSON.stringify(requestBody)
             });
             
-            if (response.ok) {
-                try {
-                    const result = await response.json();
-                    return {
-                        status: 'success',
-                        data: result
-                    };
-                } catch (jsonError) {
-                    return {
-                        status: 'success',
-                        data: { message: 'Upload successful' }
-                    };
-                }
-            } else {
+            if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
+            
+            return await response.json();
         } catch (error) {
             console.error('Document upload failed:', error);
-            return {
-                status: 'error',
-                error: error.message
-            };
+            throw error;
         }
     }
-
-    // 清空集合
-    async clearCollection() {
-        await this.ensureInitialized();
+    
+    // 删除文档
+    async deleteDocument(filename) {
         try {
-            const url = this.buildUrl('/collection/clear');
+            const url = `${this.baseUrl}/documents/${encodeURIComponent(filename)}`;
             const response = await fetch(url, {
                 method: 'DELETE',
                 headers: {
@@ -350,22 +232,22 @@ class RAGApiClient {
             
             return await response.json();
         } catch (error) {
-            console.error('Clear collection failed:', error);
+            console.error('Document deletion failed:', error);
             throw error;
         }
     }
 
-    // 调试方法
+    // 其他方法...
+    
     getConfiguration() {
         return {
             baseUrl: this.baseUrl,
-            initialized: this.initialized,
             endpoints: {
-                query: this.buildUrl('/query'),
-                health: this.buildUrl('/health'),
-                documents: this.buildUrl('/documents'),
-                stats: this.buildUrl('/stats'),
-                search: this.buildUrl('/search')
+                query: `${this.baseUrl}/query`,
+                health: `${this.baseUrl}/health`,
+                documents: `${this.baseUrl}/documents`,
+                stats: `${this.baseUrl}/stats`,
+                search: `${this.baseUrl}/search`
             },
             environment: {
                 hostname: window.location.hostname,
@@ -379,7 +261,5 @@ class RAGApiClient {
 // 创建全局API客户端实例
 const apiClient = new RAGApiClient();
 
-// 等待初始化完成后输出配置
-apiClient.initPromise.then(() => {
-    console.log('RAG API Client Configuration:', apiClient.getConfiguration());
-});
+// 配置信息
+console.log('RAG API Client Configuration:', apiClient.getConfiguration());

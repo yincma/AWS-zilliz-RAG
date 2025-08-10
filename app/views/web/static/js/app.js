@@ -67,24 +67,36 @@ function initSettings() {
             apiUrl: apiUrlInput.value,
             darkMode: darkModeInput.checked,
             autoScroll: autoScrollInput.checked,
-            temperature: document.getElementById('temperature').value,
-            maxTokens: document.getElementById('max-tokens').value
+            temperature: parseFloat(document.getElementById('temperature').value),
+            maxTokens: parseInt(document.getElementById('max-tokens').value),
+            topK: 5,  // 默认值
+            useRag: true  // 默认值
         };
         
-        localStorage.setItem('ragSettings', JSON.stringify(settings));
+        // 验证设置
+        const validation = window.configManager.validateSettings(settings);
+        if (!validation.valid) {
+            alert('设置无效:\n' + validation.errors.join('\n'));
+            return;
+        }
         
-        // 应用设置
-        applySettings(settings);
-        
-        alert('设置已保存');
+        // 使用ConfigManager保存设置
+        if (window.configManager.saveSettings(settings)) {
+            // 应用设置
+            applySettings(settings);
+            alert('设置已保存');
+        } else {
+            alert('保存设置失败');
+        }
     });
     
     // 重置设置
     resetBtn.addEventListener('click', () => {
         if (confirm('确定要重置所有设置吗？')) {
-            localStorage.removeItem('ragSettings');
+            // 使用ConfigManager重置设置
+            window.configManager.resetToDefaults();
             loadSettings();
-            alert('设置已重置');
+            alert('设置已重置为默认值');
         }
     });
     
@@ -94,18 +106,10 @@ function initSettings() {
     });
 }
 
-// 加载设置
+// 加载设置 - 使用ConfigManager统一管理
 function loadSettings() {
-    const defaultSettings = {
-        apiUrl: 'https://abbrw64qve.execute-api.us-east-1.amazonaws.com/prod',
-        darkMode: false,
-        autoScroll: true,
-        temperature: 0.7,
-        maxTokens: 1000
-    };
-    
-    const savedSettings = localStorage.getItem('ragSettings');
-    const settings = savedSettings ? JSON.parse(savedSettings) : defaultSettings;
+    // 从ConfigManager加载设置，确保配置的一致性
+    const settings = window.configManager.loadSettings();
     
     // 应用设置到界面
     document.getElementById('api-url').value = settings.apiUrl;
@@ -113,6 +117,13 @@ function loadSettings() {
     document.getElementById('auto-scroll').checked = settings.autoScroll;
     document.getElementById('temperature').value = settings.temperature;
     document.getElementById('max-tokens').value = settings.maxTokens;
+    
+    // 显示当前API配置信息（用于调试）
+    const apiInfo = window.configManager.getApiInfo();
+    console.log('加载配置:', {
+        settings: settings,
+        apiInfo: apiInfo
+    });
     
     // 应用设置
     applySettings(settings);

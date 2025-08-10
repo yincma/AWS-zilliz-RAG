@@ -172,17 +172,69 @@ class WebStack(Stack):
         
         # 为API调用添加额外的行为（如果提供了有效的API URL）
         if api_url and api_url != "https://api.example.com":
-            # 提取域名部分
-            api_domain = api_url.replace("https://", "").replace("http://", "").split("/")[0]
-            if api_domain and "." in api_domain:  # 确保是有效域名
+            # 解析API Gateway URL格式: https://xxx.execute-api.region.amazonaws.com/stage/
+            # 提取域名和stage路径
+            import re
+            
+            # 使用正则表达式解析API Gateway URL
+            api_gateway_pattern = r'https?://([^/]+\.execute-api\.[^/]+\.amazonaws\.com)/?(.*)'
+            match = re.match(api_gateway_pattern, api_url.rstrip('/'))
+            
+            if match:
+                api_domain = match.group(1)
+                # 获取stage路径，如果URL中有stage就使用，否则使用context中的stage
+                stage_path = match.group(2)
+                if stage_path:
+                    # 确保stage_path格式正确
+                    stage_path = stage_path.strip('/')
+                    if stage_path:
+                        stage_path = f'/{stage_path}'
+                    else:
+                        # 如果为空，从context获取
+                        stage = self.node.try_get_context('stage') or 'prod'
+                        stage_path = f'/{stage}'
+                else:
+                    # 从context获取stage，默认使用'prod'
+                    stage = self.node.try_get_context('stage') or 'prod'
+                    stage_path = f'/{stage}'
+                
+                print(f"API Gateway配置: domain={api_domain}, stage_path={stage_path}")
+                
+                # 使用内置的源请求策略
+                api_origin_request_policy = cloudfront.OriginRequestPolicy.ALL_VIEWER
+                
+                # 添加单一的API行为模式，所有API调用都通过/api/*路径
+                # API Gateway已经包含stage在URL中，直接使用完整URL
                 distribution.add_behavior(
                     "/api/*",
                     origins.HttpOrigin(api_domain),
                     viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
                     allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
                     cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-                    origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER
+                    origin_request_policy=api_origin_request_policy,
+                    response_headers_policy=response_headers_policy
                 )
+                
+                print(f"已配置CloudFront API行为: /api/* -> https://{api_domain} (API Gateway包含stage路径)")
+            else:
+                # 如果不是API Gateway URL，尝试作为普通HTTP origin处理
+                api_parts = api_url.replace("https://", "").replace("http://", "").split("/", 1)
+                api_domain = api_parts[0]
+                
+                if api_domain and "." in api_domain:
+                    # 对于非API Gateway的HTTP origin，不设置origin_path避免错误
+                    # CloudFront会自动处理路径转发
+                    http_origin = origins.HttpOrigin(api_domain)
+                    
+                    distribution.add_behavior(
+                        "/api/*",
+                        http_origin,
+                        viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+                        allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                        cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                        origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER,
+                        response_headers_policy=response_headers_policy
+                    )
         
         # 准备前端文件路径
         web_assets_path = os.path.join(
@@ -233,7 +285,9 @@ window.RAG_CONFIG = {{
     // 兼容旧配置
     API_BASE_URL: API_CONFIG.API_URL,
     MAX_QUERY_LENGTH: 500,
-    TIMEOUT: API_CONFIG.REQUEST_TIMEOUT
+    TIMEOUT: API_CONFIG.REQUEST_TIMEOUT,
+    // 添加stage信息
+    STAGE: '{self.node.try_get_context('stage') or 'prod'}'
 }};
 """
         

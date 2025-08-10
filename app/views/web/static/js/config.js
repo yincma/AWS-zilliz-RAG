@@ -1,9 +1,12 @@
 // 动态配置文件 - 无需硬编码API URL
 const API_CONFIG = {
-    // API端点 - 使用相对路径，通过CloudFront反向代理
+    // API端点 - 根据环境动态确定
     API_URL: window.location.hostname === 'localhost' 
         ? 'http://localhost:8000' 
-        : '',  // 生产环境使用相对路径
+        : (window.location.hostname.includes('cloudfront.net') || 
+           window.location.hostname.includes('amazonaws.com'))
+            ? '' // CloudFront环境使用相对路径，API通过同源访问
+            : window.RAG_API_URL || '',  // 使用环境变量或相对路径
     
     // CloudFront分发域名（自动检测）
     CLOUDFRONT_URL: window.location.origin,

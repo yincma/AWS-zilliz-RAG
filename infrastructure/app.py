@@ -56,11 +56,11 @@ env = Environment(
 print(f"📋 CDK部署配置:")
 print(f"  账号: {ACCOUNT or '将从AWS CLI获取'}")
 print(f"  区域: {REGION}")
-print(f"  阶段: {app.node.try_get_context('stage') or 'dev'}")
+print(f"  阶段: {app.node.try_get_context('stage') or 'prod'}")
 
 # 项目名称前缀
 project_name = "RAG"
-stage = app.node.try_get_context("stage") or "dev"
+stage = app.node.try_get_context("stage") or "prod"  # 统一默认使用prod
 
 # 创建数据栈（S3, DynamoDB等）
 data_stack = DataStack(

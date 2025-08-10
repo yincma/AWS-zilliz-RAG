@@ -24,35 +24,21 @@ class ApiStackV2(Stack):
                  data_bucket: s3.Bucket, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
-        # 定义参数
-        bedrock_model_param = CfnParameter(
-            self, "BedrockModelId",
-            type="String",
-            default="amazon.nova-lite-v1:0",
-            description="Bedrock model ID"
-        )
+        # 直接从环境变量读取配置（从.env文件加载）
+        # 这样确保配置能正确传递给Lambda函数
+        bedrock_model_id = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
+        embedding_model_id = os.environ.get("EMBEDDING_MODEL_ID", "amazon.titan-embed-image-v1")
+        zilliz_endpoint = os.environ.get("ZILLIZ_ENDPOINT", "")
+        zilliz_token = os.environ.get("ZILLIZ_TOKEN", "")
+        zilliz_collection = os.environ.get("ZILLIZ_COLLECTION", "rag_collection")
         
-        embedding_model_param = CfnParameter(
-            self, "EmbeddingModelId",
-            type="String",
-            default="amazon.titan-embed-text-v2:0",
-            description="Embedding model ID"
-        )
-        
-        zilliz_endpoint_param = CfnParameter(
-            self, "ZillizEndpoint",
-            type="String",
-            default="",
-            description="Zilliz endpoint URL (optional)"
-        )
-        
-        zilliz_token_param = CfnParameter(
-            self, "ZillizToken",
-            type="String",
-            default="",
-            no_echo=True,
-            description="Zilliz API token (optional)"
-        )
+        # 打印配置信息（隐藏敏感信息）
+        print(f"📋 API栈配置:")
+        print(f"  Bedrock Model: {bedrock_model_id}")
+        print(f"  Embedding Model: {embedding_model_id}")
+        print(f"  Zilliz Endpoint: {zilliz_endpoint if zilliz_endpoint else '未配置'}")
+        print(f"  Zilliz Token: {'***已配置***' if zilliz_token else '未配置'}")
+        print(f"  Zilliz Collection: {zilliz_collection}")
         
         # Lambda执行角色
         lambda_role = iam.Role(
@@ -79,14 +65,14 @@ class ApiStackV2(Stack):
         # 添加S3权限
         data_bucket.grant_read_write(lambda_role)
         
-        # 环境变量
+        # 环境变量 - 直接使用从.env文件读取的值
         environment = {
             "S3_BUCKET": data_bucket.bucket_name,
-            "BEDROCK_MODEL_ID": bedrock_model_param.value_as_string,
-            "EMBEDDING_MODEL_ID": embedding_model_param.value_as_string,
-            "ZILLIZ_ENDPOINT": zilliz_endpoint_param.value_as_string,
-            "ZILLIZ_TOKEN": zilliz_token_param.value_as_string,
-            "ZILLIZ_COLLECTION": os.environ.get("ZILLIZ_COLLECTION", "rag_collection"),
+            "BEDROCK_MODEL_ID": bedrock_model_id,
+            "EMBEDDING_MODEL_ID": embedding_model_id,
+            "ZILLIZ_ENDPOINT": zilliz_endpoint,
+            "ZILLIZ_TOKEN": zilliz_token,
+            "ZILLIZ_COLLECTION": zilliz_collection,
             "PYTHONPATH": "/var/task",
             # CORS配置
             "CORS_ALLOW_ORIGINS": "*",

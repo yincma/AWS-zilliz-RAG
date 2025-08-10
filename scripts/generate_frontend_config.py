@@ -13,7 +13,7 @@ from datetime import datetime
 def get_stack_outputs(stack_name):
     """从CloudFormation栈获取输出"""
     try:
-        cf = boto3.client('cloudformation')
+        cf = boto3.client('cloudformation', region_name='us-east-1')
         response = cf.describe_stacks(StackName=stack_name)
         
         outputs = {}
@@ -206,6 +206,70 @@ class RAGApiClient {{
             return this.query(query, topK, true);
         }}
     }}
+    
+    // 文档上传
+    async uploadDocument(uploadData) {{
+        try {{
+            const url = `${{this.baseUrl}}/documents`;
+            console.log('Uploading document to:', url);
+            
+            // 准备请求体
+            const requestBody = {{
+                content: uploadData.content,
+                filename: uploadData.filename,
+                content_type: uploadData.content_type || 'text/plain'
+            }};
+            
+            // 如果内容是base64编码的（对于二进制文件）
+            if (uploadData.content && uploadData.content.startsWith('data:')) {{
+                const base64Content = uploadData.content.split(',')[1];
+                requestBody.file_content = base64Content;
+                requestBody.content = ''; // 清空content字段
+            }}
+            
+            const response = await fetch(url, {{
+                method: 'POST',
+                headers: {{
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }},
+                body: JSON.stringify(requestBody)
+            }});
+            
+            if (!response.ok) {{
+                const errorText = await response.text();
+                throw new Error(`HTTP ${{response.status}}: ${{errorText}}`);
+            }}
+            
+            return await response.json();
+        }} catch (error) {{
+            console.error('Document upload failed:', error);
+            throw error;
+        }}
+    }}
+    
+    // 删除文档
+    async deleteDocument(filename) {{
+        try {{
+            const url = `${{this.baseUrl}}/documents/${{encodeURIComponent(filename)}}`;
+            const response = await fetch(url, {{
+                method: 'DELETE',
+                headers: {{
+                    'Accept': 'application/json'
+                }}
+            }});
+            
+            if (!response.ok) {{
+                const errorText = await response.text();
+                throw new Error(`HTTP ${{response.status}}: ${{errorText}}`);
+            }}
+            
+            return await response.json();
+        }} catch (error) {{
+            console.error('Document deletion failed:', error);
+            throw error;
+        }}
+    }}
 
     // 其他方法...
     
@@ -299,6 +363,24 @@ def main():
         json.dump(metadata, f, indent=2)
     
     print(f"✅ 元数据文件已生成: {metadata_path}")
+    
+    # 生成config.json文件（供前端动态加载）
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        'app', 'views', 'web', 'config.json'
+    )
+    
+    config_data = {
+        "apiUrl": api_url,
+        "region": os.environ.get('AWS_REGION', 'us-east-1'),
+        "stage": stage,
+        "updated": datetime.now().isoformat()
+    }
+    
+    with open(config_path, 'w') as f:
+        json.dump(config_data, f, indent=2)
+    
+    print(f"✅ 配置文件已生成: {config_path}")
 
 
 if __name__ == "__main__":

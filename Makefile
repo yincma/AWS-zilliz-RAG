@@ -109,7 +109,7 @@ synth:
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
-		cdk synth --app "python $(CDK_APP)"
+		cdk synth --app "python3 $(CDK_APP)"
 
 # 查看差异
 diff:
@@ -119,7 +119,7 @@ diff:
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
-		cdk diff --app "python $(CDK_APP)"
+		cdk diff --app "python3 $(CDK_APP)"
 
 # 完整部署V2（推荐）
 deploy-v2: check-env
@@ -136,7 +136,7 @@ deploy-v2: check-env
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
 		cdk deploy --all \
-		--app "python $(CDK_APP)" \
+		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
 		--require-approval never
 	
@@ -158,7 +158,7 @@ deploy-data:
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
 		cdk deploy RAG-Data-$(STAGE) \
-		--app "python $(CDK_APP)" \
+		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
 		--require-approval never
 
@@ -171,7 +171,7 @@ deploy-api:
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
 		cdk deploy RAG-API-$(STAGE) \
-		--app "python $(CDK_APP)" \
+		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
 		--require-approval never
 	
@@ -187,14 +187,14 @@ deploy-web:
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
 		cdk deploy RAG-Web-$(STAGE) \
-		--app "python $(CDK_APP)" \
+		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
 		--require-approval never
 
 # 生成前端配置
 generate-config:
 	@echo "⚙️ 生成前端API配置..."
-	STAGE=$(STAGE) python scripts/generate_frontend_config.py
+	STAGE=$(STAGE) python3 scripts/generate_frontend_config.py
 
 # 更新前端文件
 update-frontend: generate-config
@@ -235,8 +235,16 @@ fix-cors:
 # 修复CloudFront
 fix-cloudfront:
 	@echo "🔧 修复CloudFront配置..."
-	@$(MAKE) deploy-web
+	# 重新生成前端配置
+	@$(MAKE) generate-config
+	# 更新前端文件
 	@$(MAKE) update-frontend
+	# 验证配置
+	@echo "📋 验证配置..."
+	@if [ -f app/views/web/config.json ]; then \
+		echo "✅ config.json已生成"; \
+		cat app/views/web/config.json | head -5; \
+	fi
 	@echo "✅ CloudFront修复完成"
 
 # 验证部署
@@ -276,7 +284,7 @@ test-api:
 # 测试UI
 test-ui:
 	@echo "🧪 测试UI功能..."
-	python tests/test_ui_functionality.py
+	python3 tests/test_ui_functionality.py
 
 # 销毁资源
 destroy:
@@ -287,7 +295,7 @@ destroy:
 		AWS_REGION=$(AWS_REGION) \
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		cdk destroy --all --app "python $(CDK_APP)" --force; \
+		cdk destroy --all --app "python3 $(CDK_APP)" --force; \
 	else \
 		echo "取消销毁"; \
 	fi

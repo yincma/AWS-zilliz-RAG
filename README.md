@@ -321,7 +321,7 @@ aws logs tail /aws/lambda/RAG-Query-dev --follow
 ```bash
 make kill-cdk  # 终止冲突进程
 make clean     # 清理输出目录
-make deploy    # 重新部署
+make deploy-v2   # 重新部署
 ```
 
 **Q: Lambda函数超时**
