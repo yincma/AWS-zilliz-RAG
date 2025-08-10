@@ -140,8 +140,9 @@ class DocumentManager {
         try {
             const response = await apiClient.listDocuments();
             
-            if (response.data && response.data.length > 0) {
-                this.displayDocuments(response.data);
+            // 修复：API返回的是 response.documents，不是 response.data
+            if (response.documents && response.documents.length > 0) {
+                this.displayDocuments(response.documents);
             } else {
                 this.documentsContainer.innerHTML = '<p class="no-documents">暂无文档</p>';
             }
@@ -203,11 +204,12 @@ class DocumentManager {
         try {
             const response = await apiClient.getStats();
             
-            if (response.data) {
-                document.getElementById('stat-docs').textContent = response.data.num_entities || 0;
-                document.getElementById('stat-vectors').textContent = response.data.num_entities || 0;
-                document.getElementById('stat-dimension').textContent = response.data.dimension || 0;
-                document.getElementById('stat-collection').textContent = response.data.name || '-';
+            // 修复：直接使用response的属性，不是response.data
+            if (response) {
+                document.getElementById('stat-docs').textContent = response.documents || 0;
+                document.getElementById('stat-vectors').textContent = response.vectors || 0;
+                document.getElementById('stat-dimension').textContent = response.dimension || 0;
+                document.getElementById('stat-collection').textContent = response.collection || '-';
             }
         } catch (error) {
             console.error('Failed to update stats:', error);

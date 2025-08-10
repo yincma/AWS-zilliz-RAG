@@ -48,6 +48,25 @@ BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
 EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0
 ```
 
+### 🔧 CDK Bootstrap（必需）
+
+**⚠️ 重要：首次部署前必须执行 CDK Bootstrap**
+
+CDK Bootstrap 会创建必要的AWS资源用于部署：
+```bash
+# 初始化CDK环境（每个账号/区域只需执行一次）
+cd infrastructure
+npx cdk bootstrap aws://YOUR_ACCOUNT_ID/us-east-1
+
+# 或使用 Make 命令
+make bootstrap
+```
+
+Bootstrap 会创建：
+- S3存储桶（用于存储部署资源）
+- IAM角色（用于部署权限）
+- SSM参数（存储版本信息）
+
 ### 使用 Makefile 命令
 
 本项目使用 Makefile 统一管理所有操作，提供简洁一致的命令接口。
@@ -61,9 +80,13 @@ make help
 # 显示当前配置
 make show-config
 
+# 初始化CDK（首次部署必需）
+make bootstrap
+
 # 部署应用
-make deploy              # 交互式部署
+make deploy              # 交互式部署（默认目标）
 make deploy-fast         # 快速部署（跳过确认）
+make deploy-now          # 立即部署（无确认）
 
 # 开发相关
 make test               # 运行测试

@@ -54,29 +54,41 @@ class ApiStack(Stack):
         )
         
         # Lambda执行角色
-        lambda_role = iam.Role(
-            self,
-            "LambdaExecutionRole",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
-            ]
-        )
+        # 检查是否有预创建的角色
+        existing_role_arn = os.environ.get("LAMBDA_EXECUTION_ROLE_ARN")
         
-        # 添加Bedrock权限
-        lambda_role.add_to_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
-                ],
-                resources=["*"]
+        if existing_role_arn:
+            # 使用现有角色
+            lambda_role = iam.Role.from_role_arn(
+                self,
+                "LambdaExecutionRole",
+                existing_role_arn
             )
-        )
-        
-        # 添加S3权限
-        data_bucket.grant_read_write(lambda_role)
+        else:
+            # 创建新角色
+            lambda_role = iam.Role(
+                self,
+                "LambdaExecutionRole",
+                assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+                managed_policies=[
+                    iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
+                ]
+            )
+            
+            # 添加Bedrock权限
+            lambda_role.add_to_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "bedrock:InvokeModel",
+                        "bedrock:InvokeModelWithResponseStream"
+                    ],
+                    resources=["*"]
+                )
+            )
+            
+            # 添加S3权限
+            data_bucket.grant_read_write(lambda_role)
         
         # 环境变量
         environment = {
