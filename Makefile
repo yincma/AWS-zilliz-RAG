@@ -148,28 +148,12 @@ build-lambda:
 		echo "✅ Lambda ZIP包构建完成"; \
 	fi
 
-# 同步 CORS Helper 到所有需要的位置
+# CORS Helper在构建时自动从 MVC 位置复制
 sync-cors-helper:
-	@echo "📋 同步 CORS Helper 文件..."
-	@if [ -f lambda_functions/cors_helper.py ]; then \
-		mkdir -p infrastructure/lambda_functions; \
-		cp -f lambda_functions/cors_helper.py infrastructure/lambda_functions/ 2>/dev/null || true; \
-		if [ -d lambda_build_temp/query ]; then \
-			cp -f lambda_functions/cors_helper.py lambda_build_temp/query/ 2>/dev/null || true; \
-		fi; \
-		if [ -d lambda_build_temp/ingest ]; then \
-			cp -f lambda_functions/cors_helper.py lambda_build_temp/ingest/ 2>/dev/null || true; \
-		fi; \
-		if [ -d lambda_build_temp/delete ]; then \
-			cp -f lambda_functions/cors_helper.py lambda_build_temp/delete/ 2>/dev/null || true; \
-		fi; \
-		echo "✅ CORS Helper 已同步"; \
-	else \
-		echo "⚠️ cors_helper.py 文件不存在"; \
-	fi
+	@echo "✅ CORS Helper 已集成到构建流程"
 
 # 快速重新部署Lambda（跳过其他栈）
-redeploy-lambda: build-lambda sync-cors-helper
+redeploy-lambda: build-lambda
 	@echo "🚀 快速重新部署Lambda函数..."
 	cd infrastructure && \
 	AWS_REGION=$(AWS_REGION) \
@@ -211,8 +195,8 @@ build-lambda-fixed:
 	@mkdir -p lambda_build_temp/query lambda_build_temp/ingest
 	
 	# 复制handler文件
-	@cp lambda_functions/query_handler.py lambda_build_temp/query/
-	@cp lambda_functions/ingest_handler.py lambda_build_temp/ingest/
+	@cp app/controllers/lambda_handlers/query_handler.py lambda_build_temp/query/
+	@cp app/controllers/lambda_handlers/ingest_handler.py lambda_build_temp/ingest/
 	
 	# 使用Docker构建依赖（Linux兼容）
 	@echo "🐳 使用Docker构建Linux兼容依赖..."
@@ -225,11 +209,11 @@ build-lambda-fixed:
 				pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/ingest/"
 	
 	# 复制numpy和pandas stubs
-	@cp lambda_functions/numpy_stub.py lambda_build_temp/query/numpy/__init__.py 2>/dev/null || true
-	@cp lambda_functions/numpy_stub.py lambda_build_temp/ingest/numpy/__init__.py 2>/dev/null || true
+	@cp app/controllers/lambda_handlers/numpy_stub.py lambda_build_temp/query/numpy/__init__.py 2>/dev/null || true
+	@cp app/controllers/lambda_handlers/numpy_stub.py lambda_build_temp/ingest/numpy/__init__.py 2>/dev/null || true
 	@mkdir -p lambda_build_temp/query/pandas/api lambda_build_temp/ingest/pandas/api
-	@cp lambda_functions/pandas_stub.py lambda_build_temp/query/pandas/__init__.py 2>/dev/null || true
-	@cp lambda_functions/pandas_stub.py lambda_build_temp/ingest/pandas/__init__.py 2>/dev/null || true
+	@cp app/controllers/lambda_handlers/pandas_stub.py lambda_build_temp/query/pandas/__init__.py 2>/dev/null || true
+	@cp app/controllers/lambda_handlers/pandas_stub.py lambda_build_temp/ingest/pandas/__init__.py 2>/dev/null || true
 	
 	# 打包
 	@cd lambda_build_temp/query && zip -r ../../zilliz-rag-query.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q

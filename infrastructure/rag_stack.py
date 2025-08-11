@@ -98,8 +98,8 @@ class RAGStack(Stack):
         lambda_layer = lambda_.LayerVersion(
             self, "RAGDependencies",
             code=lambda_.Code.from_asset(
-                str(Path(__file__).parent.parent / "app" / "lambda_functions" / "layer.zip")
-            ) if (Path(__file__).parent.parent / "app" / "lambda_functions" / "layer.zip").exists() else lambda_.Code.from_inline("# placeholder"),
+                str(Path(__file__).parent.parent / "app" / "controllers" / "lambda_handlers" / "layer.zip")
+            ) if (Path(__file__).parent.parent / "app" / "controllers" / "lambda_handlers" / "layer.zip").exists() else lambda_.Code.from_inline("# placeholder"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
             description="RAG system dependencies",
         )
@@ -109,7 +109,7 @@ class RAGStack(Stack):
             self, "HealthCheckFunction",
             runtime=lambda_.Runtime.PYTHON_3_9,
             code=lambda_.Code.from_asset(
-                str(Path(__file__).parent.parent / "app" / "lambda_functions"),
+                str(Path(__file__).parent.parent / "app" / "controllers" / "lambda_handlers"),
                 exclude=["*.pyc", "__pycache__", "requirements.txt", "layer.zip"]
             ),
             handler="health_handler.lambda_handler",
@@ -125,7 +125,7 @@ class RAGStack(Stack):
             self, "QueryFunction",
             runtime=lambda_.Runtime.PYTHON_3_9,
             code=lambda_.Code.from_asset(
-                str(Path(__file__).parent.parent / "app" / "lambda_functions"),
+                str(Path(__file__).parent.parent / "app" / "controllers" / "lambda_handlers"),
                 exclude=["*.pyc", "__pycache__", "requirements.txt", "layer.zip"]
             ),
             handler="query_handler.lambda_handler",
@@ -142,7 +142,7 @@ class RAGStack(Stack):
             self, "UploadFunction",
             runtime=lambda_.Runtime.PYTHON_3_9,
             code=lambda_.Code.from_asset(
-                str(Path(__file__).parent.parent / "app" / "lambda_functions"),
+                str(Path(__file__).parent.parent / "app" / "controllers" / "lambda_handlers"),
                 exclude=["*.pyc", "__pycache__", "requirements.txt", "layer.zip"]
             ),
             handler="upload_handler.lambda_handler",

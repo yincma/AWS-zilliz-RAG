@@ -95,6 +95,11 @@ test_*.js
 *_ANALYSIS.md
 *_STATUS.md
 *_ISSUE*.md
+# Claude Code 配置
+.claude/
+CLAUDE.md
+.mcp.json
+
 Claude.md
 
 # Shell scripts (dev only)

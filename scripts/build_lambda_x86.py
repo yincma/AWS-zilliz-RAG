@@ -16,9 +16,9 @@ def build_lambda_package():
     os.makedirs('lambda_package_build')
     
     # 复制Lambda函数代码
-    for file in os.listdir('lambda_functions'):
+    for file in os.listdir('app/controllers/lambda_handlers'):
         if file.endswith('.py'):
-            shutil.copy(f'lambda_functions/{file}', 'lambda_package_build/')
+            shutil.copy(f'app/controllers/lambda_handlers/{file}', 'lambda_package_build/')
     
     # 安装依赖包 - 指定平台为manylinux x86_64
     requirements = [
@@ -70,14 +70,10 @@ def build_lambda_package():
             if dir_name in dirs:
                 shutil.rmtree(os.path.join(root, dir_name))
     
-    # 备份旧的lambda_functions目录
-    if os.path.exists('lambda_functions'):
-        if os.path.exists('lambda_functions_backup'):
-            shutil.rmtree('lambda_functions_backup')
-        shutil.move('lambda_functions', 'lambda_functions_backup')
-    
-    # 移动新的包到lambda_functions
-    shutil.move('lambda_package_build', 'lambda_functions')
+    # 移动新的包到MVC位置
+    if os.path.exists('app/controllers/lambda_handlers_build'):
+        shutil.rmtree('app/controllers/lambda_handlers_build')
+    shutil.move('lambda_package_build', 'app/controllers/lambda_handlers_build')
     
     print("✅ Lambda package built successfully!")
     
@@ -85,7 +81,7 @@ def build_lambda_package():
     print("🔍 Checking for key dependencies:")
     for dep in ['pymilvus', 'ujson', 'grpcio', 'protobuf', 'environs']:
         found = False
-        for item in os.listdir('lambda_functions'):
+        for item in os.listdir('app/controllers/lambda_handlers_build'):
             if dep in item.lower():
                 print(f"  ✓ {item}")
                 found = True
