@@ -206,10 +206,16 @@ class DocumentManager {
             
             // 修复：直接使用response的属性，不是response.data
             if (response) {
-                document.getElementById('stat-docs').textContent = response.documents || 0;
-                document.getElementById('stat-vectors').textContent = response.vectors || 0;
-                document.getElementById('stat-dimension').textContent = response.dimension || 0;
-                document.getElementById('stat-collection').textContent = response.collection || '-';
+                // 只更新向量维度和集合名称（文档总数和向量数量已从界面移除）
+                const dimensionElement = document.getElementById('stat-dimension');
+                const collectionElement = document.getElementById('stat-collection');
+                
+                if (dimensionElement) {
+                    dimensionElement.textContent = response.dimension || 0;
+                }
+                if (collectionElement) {
+                    collectionElement.textContent = response.collection || '-';
+                }
             }
         } catch (error) {
             console.error('Failed to update stats:', error);
