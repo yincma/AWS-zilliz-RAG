@@ -1,6 +1,6 @@
 {
-  "apiUrl": "https://zk57r1n61c.execute-api.us-east-1.amazonaws.com/prod",
+  "apiUrl": "https://bf9ve7hwye.execute-api.us-east-1.amazonaws.com/prod",
   "region": "us-east-1",
   "stage": "prod",
-  "updated": "2025-08-11T23:44:40.203847"
+  "updated": "2025-08-12T00:32:58.527952"
 }
