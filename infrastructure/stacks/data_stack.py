@@ -26,7 +26,8 @@ class DataStack(Stack):
             versioned=True,
             encryption=s3.BucketEncryption.S3_MANAGED,
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
-            removal_policy=RemovalPolicy.RETAIN,
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
             lifecycle_rules=[
                 s3.LifecycleRule(
                     id="DeleteOldVersions",
