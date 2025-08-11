@@ -1,5 +1,0 @@
-Collecting ujson
-  Downloading ujson-5.10.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.3 kB)
-Downloading ujson-5.10.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (53 kB)
-Installing collected packages: ujson
-Successfully installed ujson-5.10.0

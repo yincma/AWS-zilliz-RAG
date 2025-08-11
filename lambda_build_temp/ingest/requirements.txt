@@ -1,7 +1,0 @@
-boto3>=1.28.0
-pymilvus>=2.4.0
-ujson>=5.0.0
-grpcio>=1.60.0
-protobuf>=3.20.0
-environs>=10.0.0
-python-dotenv>=1.0.0
