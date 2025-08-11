@@ -1,0 +1,5 @@
+Collecting pymilvus
+  Downloading pymilvus-2.6.0-py3-none-any.whl (248 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 248.3/248.3 kB 3.1 MB/s eta 0:00:00
+Installing collected packages: pymilvus
+Successfully installed pymilvus-2.6.0

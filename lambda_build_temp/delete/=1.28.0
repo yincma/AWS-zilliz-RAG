@@ -1,0 +1,25 @@
+Collecting boto3
+  Downloading boto3-1.40.6-py3-none-any.whl.metadata (6.7 kB)
+Collecting botocore<1.41.0,>=1.40.6 (from boto3)
+  Downloading botocore-1.40.6-py3-none-any.whl.metadata (5.7 kB)
+Collecting jmespath<2.0.0,>=0.7.1 (from boto3)
+  Downloading jmespath-1.0.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting s3transfer<0.14.0,>=0.13.0 (from boto3)
+  Downloading s3transfer-0.13.1-py3-none-any.whl.metadata (1.7 kB)
+Collecting python-dateutil<3.0.0,>=2.1 (from botocore<1.41.0,>=1.40.6->boto3)
+  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting urllib3<1.27,>=1.25.4 (from botocore<1.41.0,>=1.40.6->boto3)
+  Downloading urllib3-1.26.20-py2.py3-none-any.whl.metadata (50 kB)
+Collecting six>=1.5 (from python-dateutil<3.0.0,>=2.1->botocore<1.41.0,>=1.40.6->boto3)
+  Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Downloading boto3-1.40.6-py3-none-any.whl (140 kB)
+Downloading botocore-1.40.6-py3-none-any.whl (14.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.0/14.0 MB 7.7 MB/s  0:00:01
+Downloading jmespath-1.0.1-py3-none-any.whl (20 kB)
+Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Downloading s3transfer-0.13.1-py3-none-any.whl (85 kB)
+Downloading urllib3-1.26.20-py2.py3-none-any.whl (144 kB)
+Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Installing collected packages: urllib3, six, jmespath, python-dateutil, botocore, s3transfer, boto3
+
+Successfully installed boto3-1.40.6 botocore-1.40.6 jmespath-1.0.1 python-dateutil-2.9.0.post0 s3transfer-0.13.1 six-1.17.0 urllib3-1.26.20

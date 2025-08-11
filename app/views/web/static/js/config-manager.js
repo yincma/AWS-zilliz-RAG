@@ -13,12 +13,17 @@ class ConfigManager {
 
     /**
      * 获取默认配置
-     * 所有默认值都从API客户端获取，避免硬编码
+     * 异步获取配置，支持动态加载
      */
-    getDefaultSettings() {
+    async getDefaultSettings() {
+        // 确保API客户端配置已加载
+        if (window.apiClient && window.apiClient.ensureConfigLoaded) {
+            await window.apiClient.ensureConfigLoaded();
+        }
+        
         return {
-            // API配置从apiClient获取，确保单一数据源
-            apiUrl: apiClient.baseUrl,
+            // API配置从动态加载的配置获取
+            apiUrl: window.apiClient ? window.apiClient.baseUrl : '',
             
             // UI设置
             darkMode: false,
@@ -36,30 +41,36 @@ class ConfigManager {
      * 加载设置
      * 智能处理版本更新和配置迁移
      */
-    loadSettings() {
+    async loadSettings() {
         const savedVersion = localStorage.getItem(this.VERSION_KEY);
         const savedSettings = localStorage.getItem(this.STORAGE_KEY);
         
         // 如果没有保存的设置或版本不匹配，使用默认设置
         if (!savedSettings || savedVersion !== this.CONFIG_VERSION) {
             console.log('配置版本更新或首次加载，使用默认设置');
-            return this.resetToDefaults();
+            return await this.resetToDefaults();
         }
         
         try {
             const settings = JSON.parse(savedSettings);
             
+            // 确保API客户端配置已加载
+            if (window.apiClient && window.apiClient.ensureConfigLoaded) {
+                await window.apiClient.ensureConfigLoaded();
+            }
+            
             // 验证API URL是否需要更新
-            if (settings.apiUrl !== apiClient.baseUrl) {
-                console.log(`API URL已更新: ${settings.apiUrl} -> ${apiClient.baseUrl}`);
-                settings.apiUrl = apiClient.baseUrl;
+            const currentApiUrl = window.apiClient ? window.apiClient.baseUrl : '';
+            if (settings.apiUrl !== currentApiUrl && currentApiUrl) {
+                console.log(`API URL已更新: ${settings.apiUrl} -> ${currentApiUrl}`);
+                settings.apiUrl = currentApiUrl;
                 this.saveSettings(settings);
             }
             
             return settings;
         } catch (error) {
             console.error('加载设置失败:', error);
-            return this.resetToDefaults();
+            return await this.resetToDefaults();
         }
     }
 
@@ -80,8 +91,8 @@ class ConfigManager {
     /**
      * 重置为默认设置
      */
-    resetToDefaults() {
-        const defaults = this.getDefaultSettings();
+    async resetToDefaults() {
+        const defaults = await this.getDefaultSettings();
         this.saveSettings(defaults);
         return defaults;
     }
@@ -129,25 +140,34 @@ class ConfigManager {
     /**
      * 获取当前API配置信息
      */
-    getApiInfo() {
+    async getApiInfo() {
+        // 确保API客户端配置已加载
+        if (window.apiClient && window.apiClient.ensureConfigLoaded) {
+            await window.apiClient.ensureConfigLoaded();
+        }
+        
+        const baseUrl = window.apiClient ? window.apiClient.baseUrl : '';
+        
         return {
-            currentUrl: apiClient.baseUrl,
+            currentUrl: baseUrl,
             environment: window.location.hostname === 'localhost' ? 'development' : 'production',
             endpoints: {
-                health: `${apiClient.baseUrl}/health`,
-                query: `${apiClient.baseUrl}/query`,
-                documents: `${apiClient.baseUrl}/documents`,
-                stats: `${apiClient.baseUrl}/stats`,
-                search: `${apiClient.baseUrl}/search`
-            }
+                health: `${baseUrl}/health`,
+                query: `${baseUrl}/query`,
+                documents: `${baseUrl}/documents`,
+                stats: `${baseUrl}/stats`,
+                search: `${baseUrl}/search`
+            },
+            configSource: window.apiClient ? (window.apiClient.configSource || 'unknown') : 'not-loaded',
+            configLoaded: window.apiClient ? window.apiClient.configLoaded : false
         };
     }
 
     /**
      * 迁移旧配置（用于版本升级）
      */
-    migrateOldSettings(oldSettings) {
-        const newSettings = this.getDefaultSettings();
+    async migrateOldSettings(oldSettings) {
+        const newSettings = await this.getDefaultSettings();
         
         // 保留用户的UI偏好
         if (oldSettings.darkMode !== undefined) {
@@ -166,7 +186,9 @@ class ConfigManager {
         }
         
         // API URL始终使用当前配置
-        newSettings.apiUrl = apiClient.baseUrl;
+        if (window.apiClient && window.apiClient.baseUrl) {
+            newSettings.apiUrl = window.apiClient.baseUrl;
+        }
         
         return newSettings;
     }
@@ -175,8 +197,15 @@ class ConfigManager {
 // 创建全局配置管理器实例
 window.configManager = new ConfigManager();
 
-// 导出用于调试
-console.log('ConfigManager initialized:', {
-    version: window.configManager.CONFIG_VERSION,
-    apiInfo: window.configManager.getApiInfo()
-});
+// 异步初始化和调试输出
+(async function() {
+    try {
+        const apiInfo = await window.configManager.getApiInfo();
+        console.log('ConfigManager initialized:', {
+            version: window.configManager.CONFIG_VERSION,
+            apiInfo: apiInfo
+        });
+    } catch (error) {
+        console.error('ConfigManager initialization error:', error);
+    }
+})();

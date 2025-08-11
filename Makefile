@@ -17,6 +17,9 @@ ifndef AWS_REGION
   AWS_REGION := us-east-1
 endif
 USE_API_V2 ?= true
+# 注意：有两个CDK应用
+# - app.py: 创建 RagApiStackV2 栈（当前使用）
+# - app_v2.py: 创建 RAG-API-prod 栈（备用）
 CDK_APP := app_v2.py
 
 # 确保CDK使用正确的区域
@@ -31,8 +34,17 @@ help:
 	@echo "  make install          - 安装所有依赖"
 	@echo "  make clean            - 清理构建产物和缓存"
 	@echo ""
+	@echo "⚡ Lambda快速部署 (新增):"
+	@echo "  make redeploy-lambda      - 快速重新部署Lambda（推荐）"
+	@echo "  make test-lambda          - 测试Lambda函数"
+	@echo "  make deploy-lambda-direct - 直接部署Lambda函数（21MB优化版）"
+	@echo "  make build-lambda-fixed   - 构建修复版Lambda包"
+	@echo "  make update-lambda-env    - 更新Lambda环境变量"
+	@echo "  make logs-lambda          - 查看Lambda日志"
+	@echo ""
 	@echo "☁️  部署管理 (推荐):"
 	@echo "  make deploy-v2        - 完整部署（使用改进的V2栈）"
+	@echo "  make deploy-with-layer - 使用Lambda Layer部署（解决大包问题）"
 	@echo "  make update-frontend  - 仅更新前端配置"
 	@echo "  make generate-config  - 生成前端API配置"
 	@echo ""
@@ -51,6 +63,7 @@ help:
 	@echo "  make test             - 运行所有测试"
 	@echo "  make test-api         - 测试API端点"
 	@echo "  make test-ui          - 测试UI功能"
+	@echo "  make test-lambda      - 测试Lambda函数（新增）"
 	@echo ""
 	@echo "🔧 修复命令:"
 	@echo "  make fix-cors         - 修复CORS问题"
@@ -121,10 +134,220 @@ diff:
 		USE_API_V2=$(USE_API_V2) \
 		cdk diff --app "python3 $(CDK_APP)"
 
+# 构建Lambda ZIP包（根据USE_LAYER环境变量选择模式）
+build-lambda:
+	@if [ "$(USE_LAYER)" = "true" ]; then \
+		echo "📦 构建Lambda包（Layer模式）..."; \
+	else \
+		echo "📦 构建Lambda ZIP包（传统模式）..."; \
+	fi
+	@USE_LAYER=$(USE_LAYER) bash scripts/build_lambda_package.sh
+	@if [ "$(USE_LAYER)" = "true" ]; then \
+		echo "✅ Lambda Layer包构建完成"; \
+	else \
+		echo "✅ Lambda ZIP包构建完成"; \
+	fi
+
+# 同步 CORS Helper 到所有需要的位置
+sync-cors-helper:
+	@echo "📋 同步 CORS Helper 文件..."
+	@if [ -f lambda_functions/cors_helper.py ]; then \
+		mkdir -p infrastructure/lambda_functions; \
+		cp -f lambda_functions/cors_helper.py infrastructure/lambda_functions/ 2>/dev/null || true; \
+		if [ -d lambda_build_temp/query ]; then \
+			cp -f lambda_functions/cors_helper.py lambda_build_temp/query/ 2>/dev/null || true; \
+		fi; \
+		if [ -d lambda_build_temp/ingest ]; then \
+			cp -f lambda_functions/cors_helper.py lambda_build_temp/ingest/ 2>/dev/null || true; \
+		fi; \
+		if [ -d lambda_build_temp/delete ]; then \
+			cp -f lambda_functions/cors_helper.py lambda_build_temp/delete/ 2>/dev/null || true; \
+		fi; \
+		echo "✅ CORS Helper 已同步"; \
+	else \
+		echo "⚠️ cors_helper.py 文件不存在"; \
+	fi
+
+# 快速重新部署Lambda（跳过其他栈）
+redeploy-lambda: build-lambda sync-cors-helper
+	@echo "🚀 快速重新部署Lambda函数..."
+	cd infrastructure && \
+	AWS_REGION=$(AWS_REGION) \
+		cdk deploy RAG-API-$(STAGE) \
+		--app "python3 app.py" \
+		--require-approval never
+	@echo "✅ Lambda重新部署完成！"
+	@$(MAKE) update-frontend-v2
+
+# 测试Lambda函数
+test-lambda:
+	@echo "🧪 测试Lambda函数..."
+	@FUNCTION_NAME=$$(aws lambda list-functions --region $(AWS_REGION) \
+		--query 'Functions[?contains(FunctionName, `RAG-API-$(STAGE)-QueryFunction`)].[FunctionName]' \
+		--output text | head -1); \
+	if [ -z "$$FUNCTION_NAME" ]; then \
+		echo "❌ 找不到Lambda函数"; \
+		exit 1; \
+	fi; \
+	echo "  函数名: $$FUNCTION_NAME"; \
+	echo '{"query":"test Zilliz connection","top_k":5,"use_rag":true}' | base64 > /tmp/payload.txt; \
+	aws lambda invoke \
+		--function-name $$FUNCTION_NAME \
+		--payload file:///tmp/payload.txt \
+		--region $(AWS_REGION) \
+		/tmp/response.json > /dev/null 2>&1; \
+	echo "  响应:"; \
+	cat /tmp/response.json | jq '.body' | jq -r . | jq '.sources[0]' | head -10; \
+	rm -f /tmp/payload.txt /tmp/response.json
+
+# 构建Lambda包（修复的21MB版本）
+build-lambda-fixed:
+	@echo "📦 构建修复版Lambda包（21MB优化版）..."
+	@echo "  包含pymilvus修复和轻量级stubs"
+	@if [ -d lambda_build_temp ]; then \
+		echo "清理旧的构建目录..."; \
+		rm -rf lambda_build_temp; \
+	fi
+	@mkdir -p lambda_build_temp/query lambda_build_temp/ingest
+	
+	# 复制handler文件
+	@cp lambda_functions/query_handler.py lambda_build_temp/query/
+	@cp lambda_functions/ingest_handler.py lambda_build_temp/ingest/
+	
+	# 使用Docker构建依赖（Linux兼容）
+	@echo "🐳 使用Docker构建Linux兼容依赖..."
+	@docker run --rm \
+		-v $$(pwd):/workspace \
+		-w /workspace \
+		--platform linux/amd64 \
+		python:3.9-slim \
+		bash -c "pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/query/ && \
+				pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/ingest/"
+	
+	# 复制numpy和pandas stubs
+	@cp lambda_functions/numpy_stub.py lambda_build_temp/query/numpy/__init__.py 2>/dev/null || true
+	@cp lambda_functions/numpy_stub.py lambda_build_temp/ingest/numpy/__init__.py 2>/dev/null || true
+	@mkdir -p lambda_build_temp/query/pandas/api lambda_build_temp/ingest/pandas/api
+	@cp lambda_functions/pandas_stub.py lambda_build_temp/query/pandas/__init__.py 2>/dev/null || true
+	@cp lambda_functions/pandas_stub.py lambda_build_temp/ingest/pandas/__init__.py 2>/dev/null || true
+	
+	# 打包
+	@cd lambda_build_temp/query && zip -r ../../zilliz-rag-query.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q
+	@cd lambda_build_temp/ingest && zip -r ../../zilliz-rag-ingest.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q
+	
+	@echo "✅ Lambda包构建完成："
+	@ls -lh zilliz-rag-*.zip | awk '{print "  " $$9 ": " $$5}'
+
+# 构建Lambda Layer（显式）
+build-lambda-layer:
+	@echo "📦 构建Lambda Layer包..."
+	@USE_LAYER=true bash scripts/build_lambda_package.sh
+	@echo "✅ Lambda Layer包构建完成"
+
+# 构建传统Lambda ZIP包（显式）
+build-lambda-zip:
+	@echo "📦 构建传统Lambda ZIP包..."
+	@USE_LAYER=false bash scripts/build_lambda_package.sh
+	@echo "✅ Lambda ZIP包构建完成"
+
+# 使用Lambda Layer部署（解决大包问题）
+deploy-with-layer:
+	@echo "🚀 使用Lambda Layer模式部署..."
+	@export USE_LAYER=true && $(MAKE) deploy-v2
+
+# 直接部署Lambda函数（不通过CDK）
+deploy-lambda-direct: build-lambda-fixed
+	@echo "🚀 直接部署Lambda函数到AWS..."
+	@echo "  区域: $(AWS_REGION)"
+	
+	# 检查Lambda函数是否存在
+	@if aws lambda get-function --function-name rag-query-handler --region $(AWS_REGION) >/dev/null 2>&1; then \
+		echo "📦 更新Query Lambda函数..."; \
+		aws lambda update-function-code \
+			--function-name rag-query-handler \
+			--zip-file fileb://zilliz-rag-query.zip \
+			--region $(AWS_REGION) \
+			--output json | jq '{FunctionName, LastModified, CodeSize}'; \
+	else \
+		echo "❌ Lambda函数不存在，请先使用CDK部署基础架构"; \
+		exit 1; \
+	fi
+	
+	@if aws lambda get-function --function-name rag-ingest-handler --region $(AWS_REGION) >/dev/null 2>&1; then \
+		echo "📦 更新Ingest Lambda函数..."; \
+		aws lambda update-function-code \
+			--function-name rag-ingest-handler \
+			--zip-file fileb://zilliz-rag-ingest.zip \
+			--region $(AWS_REGION) \
+			--output json | jq '{FunctionName, LastModified, CodeSize}'; \
+	else \
+		echo "❌ Lambda函数不存在，请先使用CDK部署基础架构"; \
+		exit 1; \
+	fi
+	
+	# 更新环境变量
+	@$(MAKE) update-lambda-env
+	
+	@echo "✅ Lambda函数部署完成！"
+
+# 更新Lambda环境变量
+update-lambda-env:
+	@echo "🔧 更新Lambda环境变量..."
+	
+	# 创建环境变量JSON文件
+	@echo '{"Variables": {' > env-vars-temp.json
+	@echo '  "S3_BUCKET": "rag-documents-375004070918-$(AWS_REGION)",' >> env-vars-temp.json
+	@echo '  "ZILLIZ_COLLECTION": "$(ZILLIZ_COLLECTION)",' >> env-vars-temp.json
+	@echo '  "AWS_REGION_NAME": "$(AWS_REGION)",' >> env-vars-temp.json
+	@echo '  "ZILLIZ_ENDPOINT": "$(ZILLIZ_ENDPOINT)",' >> env-vars-temp.json
+	@echo '  "ZILLIZ_TOKEN": "$(ZILLIZ_TOKEN)",' >> env-vars-temp.json
+	@echo '  "BEDROCK_MODEL_ID": "$(BEDROCK_MODEL_ID)",' >> env-vars-temp.json
+	@echo '  "EMBEDDING_MODEL_ID": "$(EMBEDDING_MODEL_ID)"' >> env-vars-temp.json
+	@echo '}}' >> env-vars-temp.json
+	
+	# 更新Query Lambda环境变量
+	@aws lambda update-function-configuration \
+		--function-name rag-query-handler \
+		--environment file://env-vars-temp.json \
+		--region $(AWS_REGION) \
+		--output json | jq '{FunctionName, State}' || true
+	
+	# 更新Ingest Lambda环境变量
+	@aws lambda update-function-configuration \
+		--function-name rag-ingest-handler \
+		--environment file://env-vars-temp.json \
+		--region $(AWS_REGION) \
+		--output json | jq '{FunctionName, State}' || true
+	
+	@rm -f env-vars-temp.json
+	@echo "✅ 环境变量更新完成"
+
+# 查看Lambda函数列表
+list-lambda:
+	@echo "📋 列出所有Lambda函数..."
+	@aws lambda list-functions --region $(AWS_REGION) \
+		--query 'Functions[?contains(FunctionName, `RAG-API-$(STAGE)`)].[FunctionName,LastModified,CodeSize]' \
+		--output table
+
+# 查看Lambda日志
+logs-lambda:
+	@echo "📋 查看Lambda日志..."
+	@echo "Query Lambda最近日志："
+	@aws logs filter-log-events \
+		--log-group-name /aws/lambda/rag-query-handler \
+		--start-time $$(date -u -v-5M +%s)000 \
+		--region $(AWS_REGION) \
+		--query 'events[-10:].message' \
+		--output text
+	@echo ""
+	@echo "如需实时日志，运行："
+	@echo "  aws logs tail /aws/lambda/rag-query-handler --follow --region $(AWS_REGION)"
+
 # 完整部署V2（推荐）
-deploy-v2: check-env
+deploy-v2: check-env build-lambda
 	@echo "🚀 部署RAG应用 V2（包含所有修复）..."
 	@echo "  使用API V2: $(USE_API_V2)"
+	@echo "  使用Layer模式: $(USE_LAYER)"
 	@echo "  阶段: $(STAGE)"
 	@echo "  区域: $(AWS_REGION)"
 	@echo "  CDK_DEFAULT_REGION: $(CDK_DEFAULT_REGION)"
@@ -135,6 +358,12 @@ deploy-v2: check-env
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
+		USE_LAYER=$(USE_LAYER) \
+		BEDROCK_MODEL_ID=$(BEDROCK_MODEL_ID) \
+		EMBEDDING_MODEL_ID=$(EMBEDDING_MODEL_ID) \
+		ZILLIZ_ENDPOINT=$(ZILLIZ_ENDPOINT) \
+		ZILLIZ_TOKEN=$(ZILLIZ_TOKEN) \
+		ZILLIZ_COLLECTION=$(ZILLIZ_COLLECTION) \
 		cdk deploy --all \
 		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
@@ -194,36 +423,74 @@ deploy-web:
 # 生成前端配置
 generate-config:
 	@echo "⚙️ 生成前端API配置..."
+	@echo "  使用 RAG-API-$(STAGE) 栈"
+	export CDK_STACK_NAME=RAG-API-$(STAGE) && \
 	STAGE=$(STAGE) python3 scripts/generate_frontend_config.py
 
-# 更新前端文件
+# 更新前端文件（旧版本，保留兼容性）
 update-frontend: generate-config
 	@echo "📤 更新前端文件到S3..."
 	
 	# 获取S3桶名称
-	$(eval BUCKET_NAME := $(shell aws cloudformation describe-stacks \
-		--stack-name RAG-Web-$(STAGE) \
-		--query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
-		--output text))
+	$(eval BUCKET_NAME := $(shell aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text 2>/dev/null || echo ""))
 	
-	# 同步文件到S3
-	aws s3 sync app/views/web/ s3://$(BUCKET_NAME)/ \
-		--exclude "*.backup*" \
-		--exclude ".git/*" \
-		--exclude "*.DS_Store" \
-		--cache-control "max-age=3600"
+	@if [ -z "$(BUCKET_NAME)" ]; then \
+		echo "⚠️ 未找到旧栈，尝试新栈..."; \
+		$(MAKE) update-frontend-v2; \
+	else \
+		echo "📦 同步文件到S3: $(BUCKET_NAME)"; \
+		aws s3 sync app/views/web/ s3://$(BUCKET_NAME)/ \
+			--exclude "*.backup*" \
+			--exclude ".git/*" \
+			--exclude "*.DS_Store" \
+			--cache-control "max-age=3600"; \
+		echo "🔄 清除CloudFront缓存..."; \
+		DISTRIBUTION_ID=$$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text 2>/dev/null || echo ""); \
+		if [ -n "$$DISTRIBUTION_ID" ]; then \
+			aws cloudfront create-invalidation \
+				--distribution-id $$DISTRIBUTION_ID \
+				--paths "/*" > /dev/null; \
+			echo "✅ CloudFront 缓存已清除"; \
+		else \
+			echo "⚠️ 未找到 CloudFront Distribution ID，跳过缓存清除"; \
+		fi; \
+		echo "✅ 前端更新完成"; \
+	fi
+
+# 更新前端文件（新版本，用于统一的栈命名）
+update-frontend-v2: generate-config
+	@echo "📤 更新前端文件到S3..."
 	
-	# 清除CloudFront缓存
-	$(eval DISTRIBUTION_ID := $(shell aws cloudformation describe-stacks \
-		--stack-name RAG-Web-$(STAGE) \
-		--query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' \
-		--output text))
+	# 获取S3桶名称 - 从 Web 栈获取
+	$(eval BUCKET_NAME := $(shell aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text 2>/dev/null || echo ""))
 	
-	aws cloudfront create-invalidation \
-		--distribution-id $(DISTRIBUTION_ID) \
-		--paths "/*" > /dev/null
+	@if [ -z "$(BUCKET_NAME)" ]; then \
+		ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text); \
+		BUCKET_NAME="rag-web-$$ACCOUNT_ID-$(AWS_REGION)"; \
+		echo "⚠️ 使用默认桶名: $$BUCKET_NAME"; \
+	fi
 	
-	@echo "✅ 前端更新完成"
+	@if [ -n "$(BUCKET_NAME)" ] && [ -d app/views/web ]; then \
+		echo "📦 同步文件到S3: $(BUCKET_NAME)"; \
+		aws s3 sync app/views/web/ s3://$(BUCKET_NAME)/ \
+			--exclude "*.backup*" \
+			--exclude ".git/*" \
+			--exclude "*.DS_Store" \
+			--cache-control "max-age=3600"; \
+		echo "🔄 清除CloudFront缓存..."; \
+		DISTRIBUTION_ID=$$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text 2>/dev/null || echo ""); \
+		if [ -n "$$DISTRIBUTION_ID" ]; then \
+			aws cloudfront create-invalidation \
+				--distribution-id $$DISTRIBUTION_ID \
+				--paths "/*" > /dev/null; \
+			echo "✅ CloudFront 缓存已清除"; \
+		else \
+			echo "⚠️ 未找到 CloudFront Distribution ID"; \
+		fi; \
+		echo "✅ 前端更新完成 (V2)"; \
+	else \
+		echo "❌ 无法更新前端：S3桶或前端目录不存在"; \
+	fi
 
 # 修复CORS问题
 fix-cors:

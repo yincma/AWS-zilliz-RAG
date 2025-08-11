@@ -2,23 +2,38 @@
 let chatManager, documentManager, searchManager;
 
 // 初始化应用
-document.addEventListener('DOMContentLoaded', () => {
-    // 初始化管理器
-    chatManager = new ChatManager();
-    documentManager = new DocumentManager();
-    searchManager = new SearchManager();
-    
-    // 初始化标签页切换
-    initTabNavigation();
-    
-    // 初始化设置
-    initSettings();
-    
-    // 检查服务器连接
-    checkServerConnection();
-    
-    // 定期检查连接状态
-    setInterval(checkServerConnection, 30000);
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        // 确保API客户端配置已加载
+        if (window.apiClient && window.apiClient.initializeConfig) {
+            await window.apiClient.initializeConfig();
+            console.log('API configuration loaded successfully');
+        }
+        
+        // 初始化管理器
+        chatManager = new ChatManager();
+        documentManager = new DocumentManager();
+        searchManager = new SearchManager();
+        
+        // 初始化标签页切换
+        initTabNavigation();
+        
+        // 初始化设置（异步）
+        await initSettings();
+        
+        // 检查服务器连接
+        await checkServerConnection();
+        
+        // 定期检查连接状态
+        setInterval(checkServerConnection, 30000);
+    } catch (error) {
+        console.error('Application initialization error:', error);
+        // 显示错误信息给用户
+        const statusText = document.getElementById('status-text');
+        if (statusText) {
+            statusText.textContent = '初始化失败';
+        }
+    }
 });
 
 // 标签页切换
@@ -51,7 +66,7 @@ function initTabNavigation() {
 }
 
 // 设置功能
-function initSettings() {
+async function initSettings() {
     const apiUrlInput = document.getElementById('api-url');
     const darkModeInput = document.getElementById('dark-mode');
     const autoScrollInput = document.getElementById('auto-scroll');
@@ -59,7 +74,7 @@ function initSettings() {
     const resetBtn = document.getElementById('reset-settings');
     
     // 加载设置
-    loadSettings();
+    await loadSettings();
     
     // 保存设置
     saveBtn.addEventListener('click', () => {
@@ -91,12 +106,17 @@ function initSettings() {
     });
     
     // 重置设置
-    resetBtn.addEventListener('click', () => {
+    resetBtn.addEventListener('click', async () => {
         if (confirm('确定要重置所有设置吗？')) {
-            // 使用ConfigManager重置设置
-            window.configManager.resetToDefaults();
-            loadSettings();
-            alert('设置已重置为默认值');
+            try {
+                // 使用ConfigManager重置设置
+                await window.configManager.resetToDefaults();
+                await loadSettings();
+                alert('设置已重置为默认值');
+            } catch (error) {
+                console.error('Failed to reset settings:', error);
+                alert('重置设置失败');
+            }
         }
     });
     
@@ -107,35 +127,62 @@ function initSettings() {
 }
 
 // 加载设置 - 使用ConfigManager统一管理
-function loadSettings() {
-    // 从ConfigManager加载设置，确保配置的一致性
-    const settings = window.configManager.loadSettings();
-    
-    // 应用设置到界面
-    document.getElementById('api-url').value = settings.apiUrl;
-    document.getElementById('dark-mode').checked = settings.darkMode;
-    document.getElementById('auto-scroll').checked = settings.autoScroll;
-    document.getElementById('temperature').value = settings.temperature;
-    document.getElementById('max-tokens').value = settings.maxTokens;
-    
-    // 显示当前API配置信息（用于调试）
-    const apiInfo = window.configManager.getApiInfo();
-    console.log('加载配置:', {
-        settings: settings,
-        apiInfo: apiInfo
-    });
-    
-    // 应用设置
-    applySettings(settings);
+async function loadSettings() {
+    try {
+        // 从ConfigManager加载设置，确保配置的一致性
+        const settings = await window.configManager.loadSettings();
+        
+        // 应用设置到界面
+        if (document.getElementById('api-url')) {
+            document.getElementById('api-url').value = settings.apiUrl || '';
+        }
+        if (document.getElementById('dark-mode')) {
+            document.getElementById('dark-mode').checked = settings.darkMode;
+        }
+        if (document.getElementById('auto-scroll')) {
+            document.getElementById('auto-scroll').checked = settings.autoScroll;
+        }
+        if (document.getElementById('temperature')) {
+            document.getElementById('temperature').value = settings.temperature;
+        }
+        if (document.getElementById('max-tokens')) {
+            document.getElementById('max-tokens').value = settings.maxTokens;
+        }
+        
+        // 显示当前API配置信息（用于调试）
+        const apiInfo = await window.configManager.getApiInfo();
+        console.log('加载配置:', {
+            settings: settings,
+            apiInfo: apiInfo
+        });
+        
+        // 应用设置
+        applySettings(settings);
+    } catch (error) {
+        console.error('Failed to load settings:', error);
+        // 使用默认配置
+        applySettings({
+            apiUrl: '',
+            darkMode: false,
+            autoScroll: true,
+            temperature: 0.7,
+            maxTokens: 1000
+        });
+    }
 }
 
 // 应用设置
 function applySettings(settings) {
-    // 更新API客户端URL
-    apiClient.baseUrl = settings.apiUrl;
+    // 注意：API URL由API客户端自动管理，不应在此处手动设置
+    // apiClient的baseUrl已经通过动态配置加载
     
     // 应用深色模式
     document.body.classList.toggle('dark-mode', settings.darkMode);
+    
+    // 存储自动滚动设置（供聊天管理器使用）
+    if (window.chatManager) {
+        window.chatManager.autoScroll = settings.autoScroll;
+    }
 }
 
 // 检查服务器连接

@@ -32,26 +32,96 @@ def generate_api_config(api_url, cloudfront_url=None):
     # 确保API URL没有尾部斜杠
     api_url = api_url.rstrip('/')
     
-    config = f"""// 自动生成的API配置文件
+    config = f"""// 动态配置加载的API客户端
 // 生成时间: {datetime.now().isoformat()}
-// 注意: 此文件由部署脚本自动生成，请勿手动修改
+// 此文件实现动态配置加载，避免硬编码
 
 class RAGApiClient {{
     constructor() {{
-        // 根据环境设置基础URL
-        if (window.location.hostname === 'localhost') {{
-            this.baseUrl = 'http://localhost:8000';
-        }} else {{
-            // 生产环境 - 使用API Gateway URL
-            this.baseUrl = '{api_url}';
+        // 初始化时使用默认值，稍后从配置文件加载
+        this.baseUrl = null;
+        this.configLoaded = false;
+        this.configPromise = null;
+        this.initializeConfig();
+    }}
+    
+    // 异步初始化配置
+    async initializeConfig() {{
+        if (this.configPromise) {{
+            return this.configPromise;
         }}
         
-        console.log('API Client initialized with baseUrl:', this.baseUrl);
+        this.configPromise = this.loadConfiguration();
+        await this.configPromise;
+        this.configLoaded = true;
+        return this.baseUrl;
+    }}
+    
+    // 从配置文件加载配置
+    async loadConfiguration() {{
+        try {{
+            // 开发环境
+            if (window.location.hostname === 'localhost') {{
+                this.baseUrl = 'http://localhost:8000';
+                this.setConfigSource('localhost');
+                console.log('Development mode - using localhost');
+                return this.baseUrl;
+            }}
+            
+            // 生产环境 - 尝试从config.json加载
+            try {{
+                const response = await fetch('/config.json?t=' + Date.now());
+                if (response.ok) {{
+                    const config = await response.json();
+                    if (config.apiUrl) {{
+                        this.baseUrl = config.apiUrl.replace(/\/$/, '');
+                        this.setConfigSource('config.json');
+                        console.log('API URL loaded from config.json:', this.baseUrl);
+                        // 存储完整配置供其他组件使用
+                        window.RAG_CONFIG_DATA = config;
+                        return this.baseUrl;
+                    }}
+                }}
+            }} catch (configError) {{
+                console.warn('Could not load config.json, using fallback');
+            }}
+            
+            // 如果无法加载config.json，使用元数据标签
+            const metaApiUrl = document.querySelector('meta[name="api-url"]')?.content;
+            if (metaApiUrl) {{
+                this.baseUrl = metaApiUrl.replace(/\/$/, '');
+                this.setConfigSource('meta-tag');
+                console.log('API URL loaded from meta tag:', this.baseUrl);
+                return this.baseUrl;
+            }}
+            
+            // 最后的备用方案：使用相对路径（假设API和前端同源）
+            this.baseUrl = window.location.origin;
+            this.setConfigSource('same-origin-fallback');
+            console.log('Using fallback API URL (same origin):', this.baseUrl);
+            return this.baseUrl;
+            
+        }} catch (error) {{
+            console.error('Error loading configuration:', error);
+            // 错误时使用相对路径
+            this.baseUrl = window.location.origin;
+            this.setConfigSource('error-fallback');
+            return this.baseUrl;
+        }}
+    }}
+    
+    // 确保配置已加载
+    async ensureConfigLoaded() {{
+        if (!this.configLoaded) {{
+            await this.initializeConfig();
+        }}
+        return this.baseUrl;
     }}
 
     // 健康检查
     async checkHealth() {{
         try {{
+            await this.ensureConfigLoaded();
             const response = await fetch(`${{this.baseUrl}}/health`, {{
                 method: 'GET',
                 headers: {{
@@ -72,6 +142,7 @@ class RAGApiClient {{
     // 查询
     async query(question, topK = 5, useRag = true) {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/query`;
             console.log('Sending query to:', url);
             
@@ -103,6 +174,7 @@ class RAGApiClient {{
     // 文档管理
     async ingestDocuments(filePaths) {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/documents`;
             const response = await fetch(url, {{
                 method: 'POST',
@@ -129,6 +201,7 @@ class RAGApiClient {{
 
     async listDocuments() {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/documents`;
             const response = await fetch(url, {{
                 method: 'GET',
@@ -151,6 +224,7 @@ class RAGApiClient {{
     // 统计信息
     async getStats() {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/stats`;
             const response = await fetch(url, {{
                 headers: {{
@@ -182,6 +256,7 @@ class RAGApiClient {{
     // 搜索
     async search(query, topK = 10) {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/search`;
             const response = await fetch(url, {{
                 method: 'POST',
@@ -210,6 +285,7 @@ class RAGApiClient {{
     // 文档上传
     async uploadDocument(uploadData) {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/documents`;
             console.log('Uploading document to:', url);
             
@@ -251,6 +327,7 @@ class RAGApiClient {{
     // 删除文档
     async deleteDocument(filename) {{
         try {{
+            await this.ensureConfigLoaded();
             const url = `${{this.baseUrl}}/documents/${{encodeURIComponent(filename)}}`;
             const response = await fetch(url, {{
                 method: 'DELETE',
@@ -271,9 +348,9 @@ class RAGApiClient {{
         }}
     }}
 
-    // 其他方法...
-    
-    getConfiguration() {{
+    // 获取配置信息
+    async getConfiguration() {{
+        await this.ensureConfigLoaded();
         return {{
             baseUrl: this.baseUrl,
             endpoints: {{
@@ -287,7 +364,66 @@ class RAGApiClient {{
                 hostname: window.location.hostname,
                 origin: window.location.origin,
                 protocol: window.location.protocol
+            }},
+            configLoaded: this.configLoaded,
+            configSource: this.configSource || 'unknown'
+        }};
+    }}
+    
+    // 设置配置源标记（用于调试）
+    setConfigSource(source) {{
+        this.configSource = source;
+    }}
+    
+    // 验证API URL格式
+    validateApiUrl(url) {{
+        if (!url) return false;
+        
+        try {{
+            const parsedUrl = new URL(url);
+            // 检查协议
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) {{
+                return false;
             }}
+            // 检查主机名
+            if (!parsedUrl.hostname) {{
+                return false;
+            }}
+            return true;
+        }} catch (error) {{
+            // 如果不是完整URL，可能是相对路径
+            return url === '' || url === '/';
+        }}
+    }}
+    
+    // 健康检查重试机制
+    async checkHealthWithRetry(maxRetries = 3, delay = 1000) {{
+        for (let i = 0; i < maxRetries; i++) {{
+            try {{
+                const result = await this.checkHealth();
+                if (result && result.status !== 'error') {{
+                    return result;
+                }}
+            }} catch (error) {{
+                console.warn(`Health check attempt ${{i + 1}} failed:`, error);
+            }}
+            
+            if (i < maxRetries - 1) {{
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }}
+        }}
+        
+        return {{ status: 'error', message: 'Max retries exceeded' }};
+    }}
+    
+    // 获取配置状态（用于调试和监控）
+    getConfigStatus() {{
+        return {{
+            loaded: this.configLoaded,
+            baseUrl: this.baseUrl,
+            source: this.configSource,
+            valid: this.validateApiUrl(this.baseUrl),
+            timestamp: new Date().toISOString()
         }};
     }}
 }}
@@ -295,8 +431,12 @@ class RAGApiClient {{
 // 创建全局API客户端实例
 const apiClient = new RAGApiClient();
 
-// 配置信息
-console.log('RAG API Client Configuration:', apiClient.getConfiguration());
+// 配置将异步加载，在初始化完成后输出配置信息
+apiClient.initializeConfig().then(() => {{
+    apiClient.getConfiguration().then(config => {{
+        console.log('RAG API Client Configuration:', config);
+    }});
+}});
 """
     
     return config
@@ -307,17 +447,39 @@ def main():
     
     # 获取环境变量或使用默认值
     stage = os.environ.get('STAGE', 'prod')
-    api_stack_name = f"RAG-API-{stage}"
+    
+    # 支持多个可能的栈名称
+    # 1. 优先使用环境变量中指定的栈名
+    # 2. 尝试 RagApiStackV2（新部署）
+    # 3. 回退到 RAG-API-{stage}（旧部署）
+    
+    custom_stack_name = os.environ.get('CDK_STACK_NAME')
+    possible_api_stacks = []
+    
+    if custom_stack_name:
+        possible_api_stacks.append(custom_stack_name)
+    
+    # 只使用统一的命名约定
+    possible_api_stacks.append(f"RAG-API-{stage}")
+    
     web_stack_name = f"RAG-Web-{stage}"
     
     print(f"📋 生成前端配置...")
-    print(f"  API栈: {api_stack_name}")
-    print(f"  Web栈: {web_stack_name}")
     
-    # 获取API栈输出
-    api_outputs = get_stack_outputs(api_stack_name)
-    if not api_outputs:
-        print("❌ 无法获取API栈输出")
+    # 尝试从可能的栈中获取输出
+    api_outputs = None
+    api_stack_name = None
+    
+    for stack_name in possible_api_stacks:
+        print(f"  尝试API栈: {stack_name}")
+        api_outputs = get_stack_outputs(stack_name)
+        if api_outputs and api_outputs.get('ApiUrl'):
+            api_stack_name = stack_name
+            print(f"  ✅ 成功获取API栈输出: {stack_name}")
+            break
+    
+    if not api_outputs or not api_stack_name:
+        print("❌ 无法从任何栈获取API输出")
         sys.exit(1)
     
     api_url = api_outputs.get('ApiUrl', '').rstrip('/')

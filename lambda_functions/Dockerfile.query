@@ -1,0 +1,17 @@
+# Lambda Query Handler的Docker镜像
+FROM public.ecr.aws/lambda/python:3.9
+
+# 设置工作目录
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# 复制requirements文件
+COPY requirements.txt .
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制Lambda函数代码
+COPY *.py ./
+
+# 设置处理器为query_handler
+CMD ["query_handler.handler"]

@@ -1,5 +1,6 @@
 """
-API栈 V2 - 包含完整CORS配置和正确的路径结构
+API栈 V2 - 使用传统ZIP包的Lambda函数和API Gateway实现
+使用ZIP包部署，避免Docker相关的技术债务
 """
 
 from aws_cdk import (
@@ -65,6 +66,9 @@ class ApiStackV2(Stack):
         # 添加S3权限
         data_bucket.grant_read_write(lambda_role)
         
+        # 检查是否使用Layer模式
+        use_layer = os.environ.get("USE_LAYER", "false").lower() == "true"
+        
         # 环境变量 - 直接使用从.env文件读取的值
         environment = {
             "S3_BUCKET": data_bucket.bucket_name,
@@ -73,42 +77,135 @@ class ApiStackV2(Stack):
             "ZILLIZ_ENDPOINT": zilliz_endpoint,
             "ZILLIZ_TOKEN": zilliz_token,
             "ZILLIZ_COLLECTION": zilliz_collection,
-            "PYTHONPATH": "/var/task",
+            "PYTHONPATH": "/opt/python:/var/task" if use_layer else "/var/task",
             # CORS配置
             "CORS_ALLOW_ORIGINS": "*",
             "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
             "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
         }
         
-        # 查询Lambda函数
-        query_function = lambda_.Function(
-            self,
-            "QueryFunction",
-            runtime=lambda_.Runtime.PYTHON_3_9,
-            code=lambda_.Code.from_asset("lambda_functions"),
-            handler="query_handler.handler",
-            role=lambda_role,
-            environment=environment,
-            timeout=Duration.seconds(30),
-            memory_size=1024,
-            log_retention=logs.RetentionDays.ONE_WEEK,
-            description="RAG查询处理函数"
+        # 动态获取Lambda包路径（从项目根目录开始）
+        lambda_package_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "lambda_build_temp"
         )
         
-        # 文档摄入Lambda函数
-        ingest_function = lambda_.Function(
-            self,
-            "IngestFunction",
-            runtime=lambda_.Runtime.PYTHON_3_9,
-            code=lambda_.Code.from_asset("lambda_functions"),
-            handler="ingest_handler.handler",
-            role=lambda_role,
-            environment=environment,
-            timeout=Duration.minutes(5),
-            memory_size=2048,
-            log_retention=logs.RetentionDays.ONE_WEEK,
-            description="文档摄入处理函数"
-        )
+        # 根据USE_LAYER决定部署方式
+        if use_layer:
+            print(f"📋 使用Lambda Layer模式部署")
+            
+            # 创建Lambda Layers
+            layer_dir = os.path.join(lambda_package_dir, "layers")
+            
+            # Pymilvus Layer（包含pymilvus、grpcio、protobuf等）
+            pymilvus_layer_path = os.path.join(layer_dir, "pymilvus-layer.zip")
+            if os.path.exists(pymilvus_layer_path):
+                pymilvus_layer = lambda_.LayerVersion(
+                    self,
+                    "PymilvusLayer",
+                    code=lambda_.Code.from_asset(pymilvus_layer_path),
+                    compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
+                    description="Pymilvus and gRPC dependencies for Zilliz integration"
+                )
+            else:
+                raise FileNotFoundError(f"Pymilvus Layer not found: {pymilvus_layer_path}. Please run 'USE_LAYER=true make build-lambda' first.")
+            
+            # AWS SDK Layer（包含boto3、python-dotenv等）
+            aws_layer_path = os.path.join(layer_dir, "aws-layer.zip")
+            if os.path.exists(aws_layer_path):
+                aws_layer = lambda_.LayerVersion(
+                    self,
+                    "AwsSdkLayer",
+                    code=lambda_.Code.from_asset(aws_layer_path),
+                    compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
+                    description="AWS SDK and utility dependencies"
+                )
+            else:
+                raise FileNotFoundError(f"AWS Layer not found: {aws_layer_path}. Please run 'USE_LAYER=true make build-lambda' first.")
+            
+            # 查询Lambda函数 - 使用Layer模式
+            query_package = os.path.join(lambda_package_dir, "query_lambda.zip")
+            query_function = lambda_.Function(
+                self,
+                "QueryFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(query_package),
+                handler="query_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.seconds(30),
+                memory_size=1024,
+                layers=[pymilvus_layer, aws_layer],  # 使用两个Layer
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="RAG查询处理函数(Layer版本)"
+            )
+            
+            # 文档摄入Lambda函数 - 使用Layer模式
+            ingest_package = os.path.join(lambda_package_dir, "ingest_lambda.zip")
+            ingest_function = lambda_.Function(
+                self,
+                "IngestFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(ingest_package),
+                handler="ingest_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.minutes(5),
+                memory_size=2048,
+                layers=[pymilvus_layer, aws_layer],  # 使用两个Layer
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="文档摄入处理函数(Layer版本)"
+            )
+            
+            # 输出Layer ARN
+            CfnOutput(
+                self,
+                "PymilvusLayerArn",
+                value=pymilvus_layer.layer_version_arn,
+                description="Pymilvus Layer ARN"
+            )
+            
+            CfnOutput(
+                self,
+                "AwsLayerArn",
+                value=aws_layer.layer_version_arn,
+                description="AWS SDK Layer ARN"
+            )
+            
+        else:
+            print(f"📋 使用传统ZIP包模式部署")
+            
+            # 查询Lambda函数 - 使用ZIP包部署（传统方式）
+            query_package = os.path.join(lambda_package_dir, "query_lambda.zip")
+            query_function = lambda_.Function(
+                self,
+                "QueryFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(query_package),
+                handler="query_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.seconds(30),
+                memory_size=1024,
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="RAG查询处理函数(ZIP版本)"
+            )
+            
+            # 文档摄入Lambda函数 - 使用ZIP包部署（传统方式）
+            ingest_package = os.path.join(lambda_package_dir, "ingest_lambda.zip")
+            ingest_function = lambda_.Function(
+                self,
+                "IngestFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(ingest_package),
+                handler="ingest_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.minutes(5),
+                memory_size=2048,
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="文档摄入处理函数(ZIP版本)"
+            )
         
         # 健康检查Lambda函数
         health_function = lambda_.Function(
@@ -276,6 +373,132 @@ def handler(event, context):
             ),
             authorization_type=apigateway.AuthorizationType.NONE
         )
+        
+        # 添加documents/{proxy+}来处理带路径参数的请求（如DELETE /documents/xxx）
+        document_item = documents.add_resource("{proxy+}")
+        
+        # DELETE方法 - 删除单个文档（支持Zilliz）
+        # 根据USE_LAYER决定部署方式
+        if use_layer:
+            # 使用Layer模式部署删除函数
+            delete_package = os.path.join(lambda_package_dir, "delete_lambda.zip")
+            delete_function = lambda_.Function(
+                self,
+                "DeleteDocFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(delete_package),
+                handler="delete_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.seconds(30),
+                memory_size=512,
+                layers=[pymilvus_layer, aws_layer] if 'pymilvus_layer' in locals() else [],
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="删除文档函数(支持Zilliz)"
+            )
+        else:
+            # 使用ZIP包模式部署删除函数
+            delete_package = os.path.join(lambda_package_dir, "delete_lambda.zip")
+            if os.path.exists(delete_package):
+                delete_function = lambda_.Function(
+                    self,
+                    "DeleteDocFunction",
+                    runtime=lambda_.Runtime.PYTHON_3_9,
+                    code=lambda_.Code.from_asset(delete_package),
+                    handler="delete_handler.handler",
+                    role=lambda_role,
+                    environment=environment,
+                    timeout=Duration.seconds(30),
+                    memory_size=512,
+                    log_retention=logs.RetentionDays.ONE_WEEK,
+                    description="删除文档函数(支持Zilliz)"
+                )
+            else:
+                # 如果删除包不存在，使用简单的内联代码作为后备
+                delete_function = lambda_.Function(
+                    self,
+                    "DeleteDocFunction",
+                    runtime=lambda_.Runtime.PYTHON_3_9,
+                    code=lambda_.Code.from_inline("""
+import json
+import boto3
+import os
+
+def handler(event, context):
+    # 获取CORS配置
+    allow_origins = os.environ.get('CORS_ALLOW_ORIGINS', '*')
+    allow_methods = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS')
+    allow_headers = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type')
+    
+    cors_headers = {
+        'Access-Control-Allow-Origin': allow_origins,
+        'Access-Control-Allow-Methods': allow_methods,
+        'Access-Control-Allow-Headers': allow_headers
+    }
+    
+    try:
+        path_params = event.get('pathParameters', {})
+        doc_path = path_params.get('proxy', '')
+        
+        if not doc_path:
+            return {
+                'statusCode': 400,
+                'headers': {**cors_headers, 'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Document path is required'})
+            }
+        
+        s3 = boto3.client('s3')
+        bucket = os.environ.get('S3_BUCKET', '')
+        s3_key = f"documents/{doc_path}" if not doc_path.startswith('documents/') else doc_path
+        
+        s3.delete_object(Bucket=bucket, Key=s3_key)
+        
+        # Try to delete embeddings
+        try:
+            embeddings_key = s3_key.replace('documents/', 'embeddings/') + '.json'
+            s3.delete_object(Bucket=bucket, Key=embeddings_key)
+        except:
+            pass
+        
+        return {
+            'statusCode': 200,
+            'headers': {**cors_headers, 'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'status': 'success',
+                'message': 'Document deleted successfully',
+                'document': doc_path,
+                'zilliz_deleted': False  # Not supported in fallback mode
+            })
+        }
+        
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'headers': {**cors_headers, 'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'status': 'error',
+                'error': str(e),
+                'message': 'Failed to delete document'
+            })
+        }
+                    """),
+                    handler="index.handler",
+                    role=lambda_role,
+                    environment=environment,
+                    timeout=Duration.seconds(10),
+                    memory_size=256,
+                    log_retention=logs.RetentionDays.ONE_WEEK,
+                    description="删除文档函数(基础版本)"
+                )
+        
+        # 添加DELETE方法
+        document_item.add_method(
+            "DELETE",
+            apigateway.LambdaIntegration(delete_function),
+            authorization_type=apigateway.AuthorizationType.NONE
+        )
+        
+        # OPTIONS方法由全局CORS配置自动处理，不需要手动添加
         
         # 搜索端点 - /search (可选)
         search = self.api.root.add_resource("search")

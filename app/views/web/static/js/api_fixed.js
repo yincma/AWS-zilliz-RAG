@@ -21,7 +21,7 @@ class RAGApiClient {
     // 查询 - 修复API路径
     async query(question, topK = 5, useRag = true) {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/query`, {
+            const response = await fetch(`${this.baseUrl}/query`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -47,7 +47,7 @@ class RAGApiClient {
     // 摄入文档 - 修复API路径
     async ingestDocuments(filePaths) {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/ingest`, {
+            const response = await fetch(`${this.baseUrl}/documents`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -71,7 +71,7 @@ class RAGApiClient {
     // 向量搜索 - 修复API路径
     async search(query, topK = 10) {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/search`, {
+            const response = await fetch(`${this.baseUrl}/search`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ class RAGApiClient {
     // 获取统计信息 - 修复API路径
     async getStats() {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/collection/stats`);
+            const response = await fetch(`${this.baseUrl}/collection/stats`);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -112,7 +112,7 @@ class RAGApiClient {
     // 列出文档 - 修复API路径
     async listDocuments() {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/documents`);
+            const response = await fetch(`${this.baseUrl}/documents`);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -128,7 +128,7 @@ class RAGApiClient {
     // 删除文档 - 修复API路径
     async deleteDocument(filename) {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/documents/${filename}`, {
+            const response = await fetch(`${this.baseUrl}/documents/${filename}`, {
                 method: 'DELETE'
             });
             
@@ -147,7 +147,7 @@ class RAGApiClient {
     async uploadDocument(uploadData) {
         try {
             // 先保存到S3，然后调用摄入API
-            const response = await fetch(`${this.baseUrl}/api/v1/ingest`, {
+            const response = await fetch(`${this.baseUrl}/documents`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -187,7 +187,7 @@ class RAGApiClient {
     // 清空集合 - 修复API路径
     async clearCollection() {
         try {
-            const response = await fetch(`${this.baseUrl}/api/v1/collection/clear`, {
+            const response = await fetch(`${this.baseUrl}/collection/clear`, {
                 method: 'DELETE'
             });
             

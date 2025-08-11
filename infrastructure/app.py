@@ -19,7 +19,7 @@ except ImportError:
     print("⚠️ python-dotenv未安装，跳过.env加载")
 
 from stacks.web_stack import WebStack
-from stacks.api_stack import ApiStack
+from stacks.api_stack_v2 import ApiStackV2
 from stacks.data_stack import DataStack
 
 # 获取环境变量（优先使用.env文件的值）
@@ -71,12 +71,12 @@ data_stack = DataStack(
 )
 
 # 创建API栈（Lambda, API Gateway）
-api_stack = ApiStack(
+api_stack = ApiStackV2(
     app,
-    f"{project_name}-API-{stage}",
+    f"{project_name}-API-{stage}",  # 使用统一的命名约定
     env=env,
     data_bucket=data_stack.document_bucket,
-    description="RAG应用API服务栈"
+    description="RAG应用API服务栈V2"
 )
 api_stack.add_dependency(data_stack)
 

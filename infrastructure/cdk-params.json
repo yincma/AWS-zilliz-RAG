@@ -1,0 +1,8 @@
+{
+  "RAG-API-prod": {
+    "BedrockModelId": "amazon.nova-pro-v1:0",
+    "EmbeddingModelId": "amazon.titan-embed-text-v2:0",
+    "ZillizEndpoint": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+    "ZillizToken": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115"
+  }
+}

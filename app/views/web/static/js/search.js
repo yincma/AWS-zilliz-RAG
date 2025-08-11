@@ -54,7 +54,7 @@ class SearchManager {
             
             const scoreSpan = document.createElement('span');
             scoreSpan.className = 'result-score';
-            scoreSpan.textContent = `相似度: ${(result.score * 100).toFixed(1)}%`;
+            scoreSpan.textContent = `相似度: ${result.score.toFixed(1)}%`;
             
             const contentDiv = document.createElement('div');
             contentDiv.className = 'result-content';

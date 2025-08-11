@@ -1,0 +1,15 @@
+{
+  "RAG-Data-prod": {
+    "ExportsOutputRefDocumentBucketAE41E5A9880EA18D": "rag-documents-375004070918-us-east-1",
+    "ExportsOutputFnGetAttDocumentBucketAE41E5A9ArnF6A03022": "arn:aws:s3:::rag-documents-375004070918-us-east-1"
+  },
+  "RagApiStackV2": {
+    "ApiUrl": "https://qo9ylcu96h.execute-api.us-east-1.amazonaws.com/prod/",
+    "IngestFunctionArn": "arn:aws:lambda:us-east-1:375004070918:function:RagApiStackV2-IngestFunction4B2F2EB2-qLcXfJAqrXQv",
+    "RagApiEndpointB6AED592": "https://qo9ylcu96h.execute-api.us-east-1.amazonaws.com/prod/",
+    "ExportsOutputRefRagApiDA20095C1B4F0205": "qo9ylcu96h",
+    "ExportsOutputRefRagApiDeploymentStageprodF300773B9256974A": "prod",
+    "ApiId": "qo9ylcu96h",
+    "QueryFunctionArn": "arn:aws:lambda:us-east-1:375004070918:function:RagApiStackV2-QueryFunctionBDF4DE5B-TqLAgQlwehgy"
+  }
+}

@@ -148,7 +148,7 @@ class ChatManager {
         sourcesDiv.className = 'message-sources';
         
         const headerDiv = document.createElement('div');
-        headerDiv.innerHTML = `<strong>引用源 (置信度: ${(confidence * 100).toFixed(1)}%)</strong>`;
+        headerDiv.innerHTML = `<strong>引用源 ${confidence ? `(置信度: ${confidence.toFixed(1)}%)` : ''}</strong>`;
         sourcesDiv.appendChild(headerDiv);
         
         sources.forEach((source, index) => {
@@ -164,7 +164,7 @@ class ChatManager {
             
             const sourceScore = document.createElement('span');
             sourceScore.className = 'source-score';
-            sourceScore.textContent = `相似度: ${(source.score * 100).toFixed(1)}%`;
+            sourceScore.textContent = `相似度: ${source.score.toFixed(1)}%`;
             
             sourceHeader.appendChild(sourceTitle);
             sourceHeader.appendChild(sourceScore);
