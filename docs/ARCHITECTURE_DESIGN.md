@@ -40,7 +40,7 @@ class Document:
 
 # Embedding Model - 向量化处理
 class EmbeddingModel:
-    - model_id: str = "amazon.titan-embed-image-v1"
+    - model_id: str = "amazon.titan-embed-g1-text-02"
     - dimension: int = 1024
     
     + encode(text: str) -> List[float]
@@ -61,7 +61,7 @@ class VectorStore:
 
 # LLM Model - 语言模型
 class LLMModel:
-    - model_id: str = "nova-pro-v1:0"
+    - model_id: str = "amazon.nova-pro-v1:0"
     - temperature: float = 0.7
     - max_tokens: int = 2048
     

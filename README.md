@@ -208,6 +208,56 @@ make destroy
 └── scripts/           # 辅助脚本
 ```
 
+## 架构图生成
+
+本项目使用 Python `diagrams` 库生成专业的架构图表。
+
+### 环境要求
+
+- Python 3.9+
+- Graphviz (图形渲染引擎)
+
+### 安装依赖
+
+```bash
+# 进入diagrams目录
+cd docs/diagrams
+
+# 安装Python依赖
+pip install -r requirements.txt
+
+# 安装Graphviz (macOS)
+brew install graphviz
+
+# 安装Graphviz (Ubuntu/Debian)
+sudo apt-get install graphviz
+
+# 安装Graphviz (CentOS/RHEL)
+sudo yum install graphviz
+```
+
+### 生成图表
+
+```bash
+# 进入项目根目录
+cd /Users/umatoratatsu/Documents/AWS/AWS-Handson/AWS-Zilliz-RAG
+
+# 生成所有架构图
+python docs/diagrams/generate_all.py
+
+# 或单独生成指定图表
+python docs/diagrams/system_architecture.py
+python docs/diagrams/rag_data_flow.py
+python docs/diagrams/document_ingestion.py
+python docs/diagrams/mvc_architecture.py
+```
+
+生成的图表将保存在 `docs/images/` 目录中：
+- `system_architecture.png` - 系统整体架构图
+- `rag_data_flow.png` - RAG查询处理流程图  
+- `document_ingestion.png` - 文档摄入流程图
+- `mvc_architecture.png` - MVC架构层次图
+
 ## 系统架构
 
 ### MVC 架构层次
@@ -246,95 +296,31 @@ make destroy
 
 ## 系统架构图
 
-### 整体架构
+### 整体架构图
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│   用户界面   │────▶│  CloudFront  │────▶│   S3 静态    │
-└─────────────┘     └──────────────┘     └──────────────┘
-       │                    │
-       ▼                    ▼
-┌─────────────┐     ┌──────────────┐
-│ API Gateway │────▶│    Lambda    │
-└─────────────┘     └──────────────┘
-                           │
-       ┌───────────────────┼───────────────────┐
-       ▼                   ▼                   ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Bedrock    │    │ Zilliz Cloud │    │      S3      │
-│  (LLM & Emb) │    │ (向量数据库)  │    │  (文档存储)   │
-└──────────────┘    └──────────────┘    └──────────────┘
-```
+![系统架构](docs/images/system_architecture.png)
+
+*图：AWS-Zilliz-RAG系统整体架构*
 
 ### MVC架构层次详细
 
-```
-[View层]
-  ├── Web前端 (CloudFront + S3)
-  ├── API响应格式化器
-  └── 数据序列化器
+![MVC架构](docs/images/mvc_architecture.png)
 
-[Controller层]  
-  ├── RAG控制器 (查询处理)
-  ├── 文档控制器 (文档管理)
-  ├── 搜索控制器 (检索逻辑)
-  └── Lambda处理器 (请求路由)
-
-[Model层]
-  ├── 文档模型 (文档处理)
-  ├── 嵌入模型 (Titan Embeddings)
-  ├── 向量存储模型 (Zilliz)
-  ├── LLM模型 (Bedrock Nova)
-  └── RAG链模型 (LangChain)
-```
+*图：基于MVC模式的应用架构层次*
 
 ## 数据流程图
 
 ### RAG查询处理流程
 
-```
-用户查询 ──▶ API Gateway ──▶ Lambda Handler
-                                    │
-                                    ▼
-                            查询预处理 & 向量化
-                                    │
-                    ┌───────────────┼───────────────┐
-                    ▼                               ▼
-              向量检索(Zilliz)                关键词检索(S3)
-                    │                               │
-                    └───────────────┬───────────────┘
-                                    ▼
-                              结果融合 & 重排序
-                                    │
-                                    ▼
-                              构建上下文(Context)
-                                    │
-                                    ▼
-                            LLM生成答案(Bedrock)
-                                    │
-                                    ▼
-                              格式化响应返回
-```
+![RAG数据流](docs/images/rag_data_flow.png)
+
+*图：从用户查询到答案生成的完整RAG处理流程*
 
 ### 文档摄入流程
 
-```
-文档上传 ──▶ S3存储 ──▶ 触发Lambda
-                            │
-                            ▼
-                        文档解析 & 分块
-                            │
-                            ▼
-                    生成向量嵌入(Titan)
-                            │
-                    ┌───────┼───────┐
-                    ▼               ▼
-              存储到Zilliz    缓存到S3
-                    │               │
-                    └───────┬───────┘
-                            ▼
-                      更新元数据 & 索引
-```
+![文档摄入](docs/images/document_ingestion.png)
+
+*图：文档上传、处理、向量化到存储的完整流程*
 
 ## API 使用
 
