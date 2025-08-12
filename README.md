@@ -1,513 +1,512 @@
-# AWS-Zilliz-RAG 系统
+# AWS-Zilliz-RAG System
 
-## 项目简介
+## Project Overview
 
-基于 AWS 和 Zilliz 的企业级 RAG (Retrieval-Augmented Generation) 应用，采用标准 MVC 架构模式，使用 LangChain 框架实现高性能文档检索增强生成系统。
+An enterprise-grade RAG (Retrieval-Augmented Generation) application based on AWS and Zilliz, implementing a standard MVC architecture pattern with the LangChain framework for high-performance document retrieval augmented generation systems.
 
-## 快速开始
+## Quick Start
 
-### 前置要求
+### Prerequisites
 
 - Python 3.9+
-- AWS CLI 配置完成
-- Node.js 14+ (用于CDK)
-- Docker (用于Lambda层构建)
-- Make工具
+- AWS CLI configured
+- Node.js 14+ (for CDK)
+- Docker (for Lambda layer building)
+- Make tool
 
-### 环境设置
+### Environment Setup
 
-1. **克隆项目**
+1. **Clone the project**
 ```bash
 git clone https://github.com/your-org/AWS-Zilliz-RAG.git
 cd AWS-Zilliz-RAG
 ```
 
-2. **安装依赖**
+2. **Install dependencies**
 ```bash
 make install
 ```
 
-3. **配置环境变量**
+3. **Configure environment variables**
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，填入你的配置
+# Edit the .env file with your configuration
 ```
 
-必需的环境变量：
+Required environment variables:
 ```bash
-# AWS配置
+# AWS Configuration
 AWS_REGION=us-east-1
 
-# Zilliz配置
+# Zilliz Configuration
 ZILLIZ_ENDPOINT=your-endpoint
 ZILLIZ_TOKEN=your-token
 ZILLIZ_COLLECTION=rag_collection
 
-# Bedrock配置 (可选，有默认值)
+# Bedrock Configuration (optional, with defaults)
 BEDROCK_MODEL_ID=amazon.nova-pro-v1:0
 EMBEDDING_MODEL_ID=amazon.titan-embed-image-v1
 
-# S3配置
+# S3 Configuration
 S3_BUCKET=rag-storage-bucket
 S3_PREFIX=documents/
 ```
 
-### 🔧 CDK Bootstrap（必需）
+### 🔧 CDK Bootstrap (Required)
 
-**⚠️ 重要：首次部署前必须执行 CDK Bootstrap**
+**⚠️ Important: CDK Bootstrap must be executed before first deployment**
 
-CDK Bootstrap 会创建必要的AWS资源用于部署：
+CDK Bootstrap creates necessary AWS resources for deployment:
 ```bash
-# 初始化CDK环境（每个账号/区域只需执行一次）
+# Initialize CDK environment (only needed once per account/region)
 cd infrastructure
 npx cdk bootstrap aws://YOUR_ACCOUNT_ID/us-east-1
 
-# 或使用 Make 命令
+# Or use Make command
 make bootstrap
 ```
 
-Bootstrap 会创建：
-- S3存储桶（用于存储部署资源）
-- IAM角色（用于部署权限）
-- SSM参数（存储版本信息）
+Bootstrap creates:
+- S3 bucket (for storing deployment assets)
+- IAM roles (for deployment permissions)
+- SSM parameters (for version information)
 
-### 使用 Makefile 命令
+### Using Makefile Commands
 
-本项目使用 Makefile 统一管理所有操作，提供简洁一致的命令接口。
+This project uses Makefile to manage all operations, providing a clean and consistent command interface.
 
-#### 📋 常用命令
+#### 📋 Common Commands
 
 ```bash
-# 查看所有可用命令
+# View all available commands
 make help
 
-# 显示当前配置
+# Show current configuration
 make show-config
 
-# 初始化CDK（首次部署必需）
+# Initialize CDK (required for first deployment)
 make bootstrap
 
-# 部署应用
-make deploy-v2           # 交互式部署（默认目标）
+# Deploy application
+make deploy-v2           # Interactive deployment (default target)
 
-# 开发相关
-make test               # 运行测试
-make lint               # 代码检查
-make type-check         # 类型检查
-make ci                 # 完整CI流程
+# Development related
+make test               # Run tests
+make lint               # Code linting
+make type-check         # Type checking
+make ci                 # Complete CI pipeline
 
-# 清理和维护
-make clean              # 清理构建产物
-make kill-cdk           # 终止CDK进程（解决进程冲突）
+# Cleanup and maintenance
+make clean              # Clean build artifacts
+make kill-cdk           # Kill CDK processes (resolve process conflicts)
 
-# CDK操作
-make synth              # 合成CloudFormation模板
-make diff               # 查看栈差异
-make destroy            # 销毁AWS资源
+# CDK operations
+make synth              # Synthesize CloudFormation templates
+make diff               # View stack differences
+make destroy            # Destroy AWS resources
 
-# 本地开发
-make run-local          # 启动本地API服务器
-make logs               # 查看Lambda日志
+# Local development
+make run-local          # Start local API server
+make logs               # View Lambda logs
 ```
 
-#### 🚀 部署流程
+#### 🚀 Deployment Process
 
-**标准部署**：
+**Standard deployment**:
 ```bash
-# 1. 检查配置
+# 1. Check configuration
 make show-config
 
-# 2. 运行测试
+# 2. Run tests
 make test
 
-# 3. 查看将要部署的变更
+# 3. View changes to be deployed
 make diff
 
-# 4. 执行部署
+# 4. Execute deployment
 make deploy
 ```
 
-**快速部署**：
+**Quick deployment**:
 ```bash
 make deploy-v2 
 ```
 
+#### 🔧 Development Workflow
 
-#### 🔧 开发工作流
-
-**日常开发**：
+**Daily development**:
 ```bash
-# 1. 清理环境
+# 1. Clean environment
 make clean
 
-# 2. 运行代码检查
+# 2. Run code checks
 make lint
 
-# 3. 运行测试
+# 3. Run tests
 make test
 
-# 4. 启动本地服务
+# 4. Start local service
 make run-local
 ```
 
-**提交前检查**：
+**Pre-commit checks**:
 ```bash
-# 运行完整的CI流程
+# Run complete CI pipeline
 make ci
 ```
 
-#### 🚨 故障排除
+#### 🚨 Troubleshooting
 
-**CDK进程冲突**：
+**CDK process conflicts**:
 ```bash
-# 如果遇到 "Another CLI is currently synthing" 错误
+# If encountering "Another CLI is currently synthing" error
 make kill-cdk
 make clean
 make deploy
 ```
 
-**查看部署日志**：
+**View deployment logs**:
 ```bash
 make logs
 ```
 
-**清理所有资源**：
+**Clean all resources**:
 ```bash
 make destroy
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 .
-├── Makefile            # 🎯 统一命令入口
-├── app/                # 应用主目录 (MVC架构)
-│   ├── models/         # Model层 - 数据和业务逻辑
-│   ├── views/          # View层 - 展示和响应
-│   └── controllers/    # Controller层 - 请求处理
-├── infrastructure/     # AWS CDK基础设施
-│   ├── app.py         # CDK应用入口
-│   └── stacks/        # CDK栈定义
-├── config/            # 配置文件
-├── tests/             # 测试套件
-├── docs/              # 文档
-│   └── CDK_BEST_PRACTICES.md  # CDK最佳实践
-└── scripts/           # 辅助脚本
+├── Makefile            # 🎯 Unified command entry point
+├── app/                # Application main directory (MVC architecture)
+│   ├── models/         # Model layer - Data and business logic
+│   ├── views/          # View layer - Presentation and responses
+│   └── controllers/    # Controller layer - Request handling
+├── infrastructure/     # AWS CDK infrastructure
+│   ├── app.py         # CDK application entry point
+│   └── stacks/        # CDK stack definitions
+├── config/            # Configuration files
+├── tests/             # Test suite
+├── docs/              # Documentation
+│   └── CDK_BEST_PRACTICES.md  # CDK best practices
+└── scripts/           # Utility scripts
 ```
 
-## 架构图生成
+## Architecture Diagram Generation
 
-本项目使用 Python `diagrams` 库生成专业的架构图表。
+This project uses Python `diagrams` library to generate professional architecture diagrams.
 
-### 环境要求
+### Environment Requirements
 
 - Python 3.9+
-- Graphviz (图形渲染引擎)
+- Graphviz (graphics rendering engine)
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
-# 进入diagrams目录
+# Enter diagrams directory
 cd docs/diagrams
 
-# 安装Python依赖
+# Install Python dependencies
 pip install -r requirements.txt
 
-# 安装Graphviz (macOS)
+# Install Graphviz (macOS)
 brew install graphviz
 
-# 安装Graphviz (Ubuntu/Debian)
+# Install Graphviz (Ubuntu/Debian)
 sudo apt-get install graphviz
 
-# 安装Graphviz (CentOS/RHEL)
+# Install Graphviz (CentOS/RHEL)
 sudo yum install graphviz
 ```
 
-### 生成图表
+### Generate Diagrams
 
 ```bash
-# 进入项目根目录
+# Enter project root directory
 cd /Users/umatoratatsu/Documents/AWS/AWS-Handson/AWS-Zilliz-RAG
 
-# 生成所有架构图
+# Generate all architecture diagrams
 python docs/diagrams/generate_all.py
 
-# 或单独生成指定图表
+# Or generate specific diagrams individually
 python docs/diagrams/system_architecture.py
 python docs/diagrams/rag_data_flow.py
 python docs/diagrams/document_ingestion.py
 python docs/diagrams/mvc_architecture.py
 ```
 
-生成的图表将保存在 `docs/images/` 目录中：
-- `system_architecture.png` - 系统整体架构图
-- `rag_data_flow.png` - RAG查询处理流程图  
-- `document_ingestion.png` - 文档摄入流程图
-- `mvc_architecture.png` - MVC架构层次图
+Generated diagrams will be saved in the `docs/images/` directory:
+- `system_architecture.png` - Overall system architecture diagram
+- `rag_data_flow.png` - RAG query processing flow diagram
+- `document_ingestion.png` - Document ingestion flow diagram
+- `mvc_architecture.png` - MVC architecture layer diagram
 
-## 系统架构
+## System Architecture
 
-### MVC 架构层次
+### MVC Architecture Layers
 
-| 层次 | 职责 | 主要组件 |
-|------|------|----------|
-| **View** | 用户界面和数据展示 | Web前端、API响应格式化器 |
-| **Controller** | 请求处理和流程控制 | RAG控制器、文档控制器、Lambda处理器 |
-| **Model** | 数据处理和业务逻辑 | 文档模型、嵌入模型、向量存储模型、LLM模型 |
+| Layer | Responsibility | Main Components |
+|-------|----------------|-----------------|
+| **View** | User interface and data presentation | Web frontend, API response formatters |
+| **Controller** | Request handling and flow control | RAG controller, Document controller, Lambda handlers |
+| **Model** | Data processing and business logic | Document model, Embedding model, Vector store model, LLM model |
 
-### 技术栈
+### Technology Stack
 
-- **语言**: Python 3.9+
-- **框架**: LangChain, FastAPI
-- **AWS服务**: 
-  - Amazon Bedrock (Nova Pro模型用于生成，Titan Multimodal Embeddings用于向量化)
-  - AWS Lambda (无服务器计算)
-  - Amazon S3 (文档存储)
-  - CloudFront (CDN分发)
+- **Language**: Python 3.9+
+- **Frameworks**: LangChain, FastAPI
+- **AWS Services**: 
+  - Amazon Bedrock (Nova Pro for generation, Titan Multimodal Embeddings for vectorization)
+  - AWS Lambda (serverless computing)
+  - Amazon S3 (document storage)
+  - CloudFront (CDN distribution)
   - API Gateway (RESTful API)
-- **向量数据库**: Zilliz Cloud / Milvus
-- **基础设施**: AWS CDK (Python)
+- **Vector Database**: Zilliz Cloud / Milvus
+- **Infrastructure**: AWS CDK (Python)
 - **CI/CD**: GitHub Actions
 
-### 核心组件说明
+### Core Component Overview
 
-| 组件 | 技术选型 | 作用 | 性能指标 |
-|------|----------|------|----------|
-| LLM服务 | Amazon Bedrock Nova Pro | 生成RAG回答 | <3s响应时间 |
-| 向量化 | Titan Multimodal Embeddings G1 | 文档和查询向量化 | 1024维向量 |
-| 向量数据库 | Zilliz Cloud | 高性能向量检索 | <200ms检索 |
-| 文档存储 | Amazon S3 | 原始文档和缓存 | 99.999999999%持久性 |
-| 计算服务 | AWS Lambda | 无服务器处理 | 自动扩展 |
-| CDN | CloudFront | 全球内容分发 | <100ms延迟 |
-| API网关 | API Gateway | RESTful API | 10000 req/s |
+| Component | Technology Choice | Purpose | Performance Metrics |
+|-----------|-------------------|---------|-------------------|
+| LLM Service | Amazon Bedrock Nova Pro | Generate RAG answers | <3s response time |
+| Vectorization | Titan Multimodal Embeddings G1 | Document and query vectorization | 1024-dimensional vectors |
+| Vector Database | Zilliz Cloud | High-performance vector retrieval | <200ms retrieval |
+| Document Storage | Amazon S3 | Raw documents and cache | 99.999999999% durability |
+| Compute Service | AWS Lambda | Serverless processing | Auto-scaling |
+| CDN | CloudFront | Global content distribution | <100ms latency |
+| API Gateway | API Gateway | RESTful API | 10,000 req/s |
 
-## 系统架构图
+## System Architecture Diagrams
 
-### 整体架构图
+### Overall Architecture Diagram
 
-![系统架构](docs/images/system_architecture.png)
+![System Architecture](docs/images/system_architecture.png)
 
-*图：AWS-Zilliz-RAG系统整体架构*
+*Figure: AWS-Zilliz-RAG overall system architecture*
 
-### MVC架构层次详细
+### Detailed MVC Architecture Layers
 
-![MVC架构](docs/images/mvc_architecture.png)
+![MVC Architecture](docs/images/mvc_architecture.png)
 
-*图：基于MVC模式的应用架构层次*
+*Figure: Application architecture layers based on MVC pattern*
 
-## 数据流程图
+## Data Flow Diagrams
 
-### RAG查询处理流程
+### RAG Query Processing Flow
 
-![RAG数据流](docs/images/rag_data_flow.png)
+![RAG Data Flow](docs/images/rag_data_flow.png)
 
-*图：从用户查询到答案生成的完整RAG处理流程*
+*Figure: Complete RAG processing flow from user query to answer generation*
 
-### 文档摄入流程
+### Document Ingestion Flow
 
-![文档摄入](docs/images/document_ingestion.png)
+![Document Ingestion](docs/images/document_ingestion.png)
 
-*图：文档上传、处理、向量化到存储的完整流程*
+*Figure: Complete flow from document upload, processing, vectorization to storage*
 
-## API 使用
+## API Usage
 
-### 查询接口
+### Query Interface
 
 ```bash
-# 发送查询请求
+# Send query request
 curl -X POST https://your-api-url/query \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "什么是RAG？",
+    "query": "What is RAG?",
     "top_k": 5
   }'
 ```
 
-### 文档上传
+### Document Upload
 
 ```bash
-# 上传文档
+# Upload document
 curl -X POST https://your-api-url/documents \
   -H "Content-Type: multipart/form-data" \
   -F "file=@document.pdf"
 ```
 
-## 监控和日志
+## Monitoring and Logging
 
-### CloudWatch 监控
+### CloudWatch Monitoring
 
 ```bash
-# 查看实时日志
+# View real-time logs
 make logs
 
-# 查看特定函数日志
+# View specific function logs
 aws logs tail /aws/lambda/RAG-Query-dev --follow
 ```
 
-### 性能指标
+### Performance Metrics
 
-系统自动收集以下指标：
-- API响应时间
-- 向量检索延迟
-- LLM生成时间
-- 错误率和成功率
+The system automatically collects the following metrics:
+- API response time
+- Vector retrieval latency
+- LLM generation time
+- Error rate and success rate
 
-## 性能优化策略
+## Performance Optimization Strategies
 
-### 缓存架构
-- **L1 内存缓存**: 5分钟TTL，100MB容量
-- **L2 Redis缓存**: 1小时TTL，1GB容量  
-- **L3 S3缓存**: 1天TTL，无限容量
+### Caching Architecture
+- **L1 Memory Cache**: 5-minute TTL, 100MB capacity
+- **L2 Redis Cache**: 1-hour TTL, 1GB capacity  
+- **L3 S3 Cache**: 1-day TTL, unlimited capacity
 
-### 向量检索优化
-- IVF_FLAT索引，1024聚类中心
-- 批量嵌入生成，32文档/批次
-- 异步并行检索，最多10并发
+### Vector Retrieval Optimization
+- IVF_FLAT index with 1024 cluster centers
+- Batch embedding generation, 32 documents per batch
+- Asynchronous parallel retrieval, up to 10 concurrent
 
-### Lambda优化
-- 预留并发：查询100，摄入10
-- 内存配置：查询1GB，摄入2GB
-- 超时设置：查询30s，摄入300s
+### Lambda Optimization
+- Reserved concurrency: Query 100, Ingestion 10
+- Memory configuration: Query 1GB, Ingestion 2GB
+- Timeout settings: Query 30s, Ingestion 300s
 
-## 监控仪表板
+## Monitoring Dashboard
 
-### 关键指标
-- **查询延迟**: P50 <1s, P95 <3s, P99 <5s
-- **成功率**: >99.9%
-- **并发用户**: 实时监控
-- **向量检索性能**: <200ms
-- **LLM生成时间**: <2s
+### Key Metrics
+- **Query Latency**: P50 <1s, P95 <3s, P99 <5s
+- **Success Rate**: >99.9%
+- **Concurrent Users**: Real-time monitoring
+- **Vector Retrieval Performance**: <200ms
+- **LLM Generation Time**: <2s
 
-### CloudWatch告警
-- 高延迟告警：>3s持续2分钟
-- 错误率告警：5xx错误>10/分钟
-- Lambda超时告警：超时率>1%
-- 成本告警：日消费>预算80%
+### CloudWatch Alarms
+- High latency alarm: >3s for 2 minutes
+- Error rate alarm: 5xx errors >10/minute
+- Lambda timeout alarm: Timeout rate >1%
+- Cost alarm: Daily spending >80% of budget
 
-## 最佳实践
+## Best Practices
 
-### 安全性
+### Security
 
-1. **永不硬编码密钥** - 使用环境变量或AWS Secrets Manager
-2. **最小权限原则** - IAM角色仅授予必需权限
-3. **加密传输** - 所有API通信使用HTTPS
-4. **定期轮换密钥** - 定期更新API密钥和令牌
+1. **Never hardcode secrets** - Use environment variables or AWS Secrets Manager
+2. **Principle of least privilege** - IAM roles grant only necessary permissions
+3. **Encrypt in transit** - All API communications use HTTPS
+4. **Regular key rotation** - Periodically update API keys and tokens
 
-### 性能优化
+### Performance Optimization
 
-1. **使用缓存** - 缓存常见查询结果
-2. **批量处理** - 批量生成向量嵌入
-3. **异步处理** - 长时间运行的任务使用队列
-4. **索引优化** - 定期优化Zilliz索引
+1. **Use caching** - Cache common query results
+2. **Batch processing** - Batch generate vector embeddings
+3. **Asynchronous processing** - Use queues for long-running tasks
+4. **Index optimization** - Regularly optimize Zilliz indexes
 
-### 开发规范
+### Development Standards
 
-1. **代码格式化** - 使用Black和isort
-2. **类型提示** - 所有函数使用类型注解
-3. **测试覆盖** - 保持80%以上测试覆盖率
-4. **文档完整** - 所有公共函数需要docstring
+1. **Code formatting** - Use Black and isort
+2. **Type hints** - All functions use type annotations
+3. **Test coverage** - Maintain >80% test coverage
+4. **Complete documentation** - All public functions need docstrings
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-**Q: CDK部署时出现进程冲突**
+**Q: CDK deployment process conflicts**
 ```bash
-make kill-cdk  # 终止冲突进程
-make clean     # 清理输出目录
-make deploy-v2   # 重新部署
+make kill-cdk  # Kill conflicting processes
+make clean     # Clean output directory
+make deploy-v2   # Redeploy
 ```
 
-**Q: Lambda函数超时**
-- 检查函数内存配置（建议3008MB）
-- 优化向量检索的top_k参数
-- 启用Lambda预留并发
+**Q: Lambda function timeout**
+- Check function memory configuration (recommend 3008MB)
+- Optimize vector retrieval top_k parameter
+- Enable Lambda reserved concurrency
 
-**Q: Zilliz连接失败**
-- 验证ZILLIZ_ENDPOINT和ZILLIZ_TOKEN
-- 检查网络连接和防火墙规则
-- 确认集合名称正确
+**Q: Zilliz connection failure**
+- Verify ZILLIZ_ENDPOINT and ZILLIZ_TOKEN
+- Check network connectivity and firewall rules
+- Confirm correct collection name
 
-### 获取帮助
+### Getting Help
 
-如遇到问题，可以：
-1. 查看项目文档：
-   - [系统架构设计](docs/ARCHITECTURE_DESIGN.md)
-   - [架构图表](docs/ARCHITECTURE_DIAGRAMS.md)  
-   - [数据模型设计](docs/DATA_MODEL_DESIGN.md)
-   - [CDK最佳实践](docs/CDK_BEST_PRACTICES.md)
-   - [CloudFront配置指南](docs/CLOUDFRONT_403_FIX.md)
-   - [API规范](docs/API_SPECIFICATION.yaml)
-2. 查看CloudWatch日志：`make logs`
-3. 提交Issue到项目仓库
+If you encounter issues, you can:
+1. Check project documentation:
+   - [System Architecture Design](docs/ARCHITECTURE_DESIGN.md)
+   - [Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)  
+   - [Data Model Design](docs/DATA_MODEL_DESIGN.md)
+   - [CDK Best Practices](docs/CDK_BEST_PRACTICES.md)
+   - [CloudFront Configuration Guide](docs/CLOUDFRONT_403_FIX.md)
+   - [API Specification](docs/API_SPECIFICATION.yaml)
+2. Check CloudWatch logs: `make logs`
+3. Submit an issue to the project repository
 
-## 快速部署指南
+## Quick Deployment Guide
 
-### 一键部署（开发环境）
+### One-click Deployment (Development Environment)
 ```bash
-# 克隆项目
+# Clone project
 git clone <repository>
 cd AWS-Zilliz-RAG
 
-# 安装依赖并部署
+# Install dependencies and deploy
 make install
-make bootstrap  # 首次部署必需
+make bootstrap  # Required for first deployment
 make deploy-v2
 ```
 
-### 生产部署清单
-- [ ] 配置生产环境变量
-- [ ] 运行完整测试套件 `make ci`
-- [ ] 检查安全配置
-- [ ] 配置监控告警
-- [ ] 准备回滚方案
-- [ ] 执行部署 `make deploy-v2`
+### Production Deployment Checklist
+- [ ] Configure production environment variables
+- [ ] Run complete test suite `make ci`
+- [ ] Check security configuration
+- [ ] Configure monitoring alerts
+- [ ] Prepare rollback plan
+- [ ] Execute deployment `make deploy-v2`
 
-## 贡献指南
+## Contributing Guide
 
-### 开发流程
-1. Fork项目并创建功能分支
-2. 遵循代码规范（Google Python Style）
-3. 编写测试（保持>80%覆盖率）
-4. 运行本地测试 `make test`
-5. 运行代码检查 `make lint`
-6. 提交PR并等待review
+### Development Process
+1. Fork the project and create a feature branch
+2. Follow code standards (Google Python Style)
+3. Write tests (maintain >80% coverage)
+4. Run local tests `make test`
+5. Run code checks `make lint`
+6. Submit PR and wait for review
 
-### 提交规范
-- feat: 新功能
-- fix: 修复bug
-- docs: 文档更新
-- refactor: 代码重构
-- test: 测试相关
-- chore: 其他修改
+### Commit Standards
+- feat: New feature
+- fix: Bug fix
+- docs: Documentation update
+- refactor: Code refactoring
+- test: Test related
+- chore: Other changes
 
-### 开发命令
+### Development Commands
 ```bash
-# 代码质量检查
-make lint               # 代码风格检查
-make type-check         # 类型检查
-make test               # 运行测试
-make ci                 # 完整CI流程
+# Code quality checks
+make lint               # Code style check
+make type-check         # Type checking
+make test               # Run tests
+make ci                 # Complete CI pipeline
 
-# 任务完成提示音
+# Task completion notification sound
 python main.py && afplay /System/Library/Sounds/Sosumi.aiff
 ```
 
-## 许可证
+## License
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
-## 维护者
+## Maintainers
 
 - [@your-team](https://github.com/your-team)
 
-## 致谢
+## Acknowledgments
 
-- [LangChain](https://github.com/langchain-ai/langchain) - RAG框架
-- [AWS CDK](https://github.com/aws/aws-cdk) - 基础设施即代码
-- [Zilliz](https://zilliz.com) - 向量数据库服务
+- [LangChain](https://github.com/langchain-ai/langchain) - RAG framework
+- [AWS CDK](https://github.com/aws/aws-cdk) - Infrastructure as Code
+- [Zilliz](https://zilliz.com) - Vector database service
 
 ---
 
-*最后更新：2025年8月*
-*版本：2.0.0*
+*Last updated: August 2025*
+*Version: 2.0.0*

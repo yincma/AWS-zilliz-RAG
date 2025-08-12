@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成所有架构图的统一脚本"""
+"""Unified script for generating all architecture diagrams"""
 
 import subprocess
 import sys
@@ -7,15 +7,15 @@ import os
 from pathlib import Path
 
 def generate_diagram(script_name):
-    """执行指定的图表生成脚本"""
-    print(f"🔄 正在生成 {script_name}...")
+    """Execute specified diagram generation script"""
+    print(f"🔄 Generating {script_name}...")
     
-    # 确保在正确的目录中执行
+    # Ensure execution in the correct directory
     diagrams_dir = Path(__file__).parent
     script_path = diagrams_dir / script_name
     
     if not script_path.exists():
-        print(f"❌ 脚本文件不存在: {script_path}")
+        print(f"❌ Script file does not exist: {script_path}")
         return False
     
     result = subprocess.run([sys.executable, str(script_path)], 
@@ -23,24 +23,24 @@ def generate_diagram(script_name):
                           capture_output=True, text=True)
     
     if result.returncode == 0:
-        print(f"✅ 成功生成 {script_name}")
+        print(f"✅ Successfully generated {script_name}")
         return True
     else:
-        print(f"❌ 生成 {script_name} 失败:")
-        print(f"   错误信息: {result.stderr}")
+        print(f"❌ Failed to generate {script_name}:")
+        print(f"   Error message: {result.stderr}")
         if result.stdout:
-            print(f"   输出信息: {result.stdout}")
+            print(f"   Output message: {result.stdout}")
         return False
 
 def main():
-    """主函数：生成所有架构图"""
-    print("🎨 开始生成 AWS-Zilliz-RAG 架构图...")
+    """Main function: Generate all architecture diagrams"""
+    print("🎨 Starting to generate AWS-Zilliz-RAG architecture diagrams...")
     
-    # 确保images目录存在 (相对于docs目录)
+    # Ensure images directory exists (relative to docs directory)
     images_dir = Path(__file__).parent.parent / "images"
     images_dir.mkdir(exist_ok=True)
     
-    # 要生成的图表脚本列表
+    # List of diagram scripts to generate
     scripts = [
         "system_architecture.py",
         "rag_data_flow.py", 
@@ -55,13 +55,13 @@ def main():
         if generate_diagram(script):
             success_count += 1
     
-    print(f"\n📊 生成完成: {success_count}/{total_count} 个图表成功生成")
+    print(f"\n📊 Generation complete: {success_count}/{total_count} diagrams successfully generated")
     
     if success_count == total_count:
-        print("🎉 所有架构图生成成功！")
+        print("🎉 All architecture diagrams generated successfully!")
         return True
     else:
-        print("⚠️  部分图表生成失败，请检查错误信息")
+        print("⚠️  Some diagrams failed to generate, please check error messages")
         return False
 
 if __name__ == "__main__":

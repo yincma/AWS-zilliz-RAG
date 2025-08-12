@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""文档摄入处理流程图"""
+"""Document Ingestion Processing Flow Diagram"""
 
 from diagrams import Diagram, Cluster, Edge
 from diagrams.aws.compute import Lambda
@@ -10,35 +10,35 @@ from diagrams.onprem.client import User
 from diagrams.generic.storage import Storage
 from diagrams.onprem.compute import Server
 
-with Diagram("文档摄入流程", filename="../images/document_ingestion", show=False, direction="TB"):
-    user = User("用户")
+with Diagram("Document Ingestion Flow", filename="../images/document_ingestion", show=False, direction="TB"):
+    user = User("User")
     
-    with Cluster("文档上传"):
-        upload = Storage("文档上传")
-        s3_storage = S3("S3存储")
-        trigger = Lambda("摄入触发器")
+    with Cluster("Document Upload"):
+        upload = Storage("Document Upload")
+        s3_storage = S3("S3 Storage")
+        trigger = Lambda("Ingestion Trigger")
     
-    with Cluster("文档处理"):
-        # 文档处理都在Lambda中运行
-        parse = Lambda("文档解析")
-        chunk = Lambda("文本分块")
-        clean = Lambda("文本清洗")
+    with Cluster("Document Processing"):
+        # Document processing runs in Lambda
+        parse = Lambda("Document Parsing")
+        chunk = Lambda("Text Chunking")
+        clean = Lambda("Text Cleaning")
     
-    with Cluster("向量化处理"):
-        batch_embed = Bedrock("批量向量化\n(Titan)")
-        # 向量优化在Lambda中运行
-        optimize = Lambda("向量优化")
+    with Cluster("Vectorization Processing"):
+        batch_embed = Bedrock("Batch Vectorization\n(Titan)")
+        # Vector optimization runs in Lambda
+        optimize = Lambda("Vector Optimization")
     
-    with Cluster("存储更新"):
-        # 使用自定义Zilliz图标
-        store_vectors = Custom("存储向量\n(Zilliz)", "../images/Zilliz.jpeg")
-        cache_s3 = S3("缓存到S3")
-        # 更新元数据在Lambda中运行
-        update_meta = Lambda("更新元数据")
+    with Cluster("Storage Update"):
+        # Use custom Zilliz icon
+        store_vectors = Custom("Store Vectors\n(Zilliz)", "../images/Zilliz.jpeg")
+        cache_s3 = S3("Cache to S3")
+        # Metadata update runs in Lambda
+        update_meta = Lambda("Update Metadata")
     
-    complete = Server("完成通知")
+    complete = Server("Completion Notification")
     
-    # 处理流程
+    # Processing flow
     user >> upload >> s3_storage >> trigger
     trigger >> parse >> chunk >> clean
     clean >> batch_embed >> optimize
