@@ -89,8 +89,6 @@ make bootstrap
 
 # 部署应用
 make deploy-v2           # 交互式部署（默认目标）
-make deploy-fast         # 快速部署（跳过确认）
-make deploy-now          # 立即部署（无确认）
 
 # 开发相关
 make test               # 运行测试
@@ -129,22 +127,11 @@ make diff
 make deploy
 ```
 
-**快速部署**（用于开发环境）：
+**快速部署**：
 ```bash
-make deploy-fast STAGE=dev
+make deploy-v2 
 ```
 
-**生产部署**：
-```bash
-# 设置环境为prod
-export STAGE=prod
-
-# 运行完整CI检查
-make ci
-
-# 部署到生产
-make deploy
-```
 
 #### 🔧 开发工作流
 
@@ -345,30 +332,6 @@ curl -X POST https://your-api-url/documents \
   -F "file=@document.pdf"
 ```
 
-## 环境管理
-
-### 多环境支持
-
-项目支持多个部署环境：
-
-```bash
-# 开发环境
-make deploy STAGE=dev
-
-# 测试环境  
-make deploy STAGE=staging
-
-# 生产环境
-make deploy STAGE=prod
-```
-
-### 环境变量管理
-
-不同环境使用不同的配置文件：
-- `.env.dev` - 开发环境
-- `.env.staging` - 测试环境
-- `.env.prod` - 生产环境
-
 ## 监控和日志
 
 ### CloudWatch 监控
@@ -546,5 +509,5 @@ python main.py && afplay /System/Library/Sounds/Sosumi.aiff
 
 ---
 
-*最后更新：2025年1月*
+*最后更新：2025年8月*
 *版本：2.0.0*
