@@ -489,7 +489,7 @@ cd AWS-Zilliz-RAG
 # 安装依赖并部署
 make install
 make bootstrap  # 首次部署必需
-make deploy-fast STAGE=dev
+make deploy-v2
 ```
 
 ### 生产部署清单
@@ -498,7 +498,7 @@ make deploy-fast STAGE=dev
 - [ ] 检查安全配置
 - [ ] 配置监控告警
 - [ ] 准备回滚方案
-- [ ] 执行部署 `make deploy STAGE=prod`
+- [ ] 执行部署 `make deploy-v2`
 
 ## 贡献指南
 
