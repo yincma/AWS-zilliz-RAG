@@ -232,14 +232,13 @@ cd /Users/umatoratatsu/Documents/AWS/AWS-Handson/AWS-Zilliz-RAG
 python docs/diagrams/generate_all.py
 
 # Or generate specific diagrams individually
-python docs/diagrams/system_architecture.py
 python docs/diagrams/rag_data_flow.py
 python docs/diagrams/document_ingestion.py
 python docs/diagrams/mvc_architecture.py
 ```
 
 Generated diagrams will be saved in the `docs/images/` directory:
-- `system_architecture.png` - Overall system architecture diagram
+diagram
 - `rag_data_flow.png` - RAG query processing flow diagram
 - `document_ingestion.png` - Document ingestion flow diagram
 - `mvc_architecture.png` - MVC architecture layer diagram
@@ -281,12 +280,6 @@ Generated diagrams will be saved in the `docs/images/` directory:
 | API Gateway | API Gateway | RESTful API | 10,000 req/s |
 
 ## System Architecture Diagrams
-
-### Overall Architecture Diagram
-
-![System Architecture](docs/images/system_architecture.png)
-
-*Figure: AWS-Zilliz-RAG overall system architecture*
 
 ### Detailed MVC Architecture Layers
 

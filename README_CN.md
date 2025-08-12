@@ -233,14 +233,12 @@ cd /Users/umatoratatsu/Documents/AWS/AWS-Handson/AWS-Zilliz-RAG
 python docs/diagrams/generate_all.py
 
 # 或单独生成指定图表
-python docs/diagrams/system_architecture.py
 python docs/diagrams/rag_data_flow.py
 python docs/diagrams/document_ingestion.py
 python docs/diagrams/mvc_architecture.py
 ```
 
 生成的图表将保存在 `docs/images/` 目录中：
-- `system_architecture.png` - 系统整体架构图
 - `rag_data_flow.png` - RAG查询处理流程图  
 - `document_ingestion.png` - 文档摄入流程图
 - `mvc_architecture.png` - MVC架构层次图
@@ -282,12 +280,6 @@ python docs/diagrams/mvc_architecture.py
 | API网关 | API Gateway | RESTful API | 10000 req/s |
 
 ## 系统架构图
-
-### 整体架构图
-
-![系统架构](docs/images/system_architecture.png)
-
-*图：AWS-Zilliz-RAG系统整体架构*
 
 ### MVC架构层次详细
 
