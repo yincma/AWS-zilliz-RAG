@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS Zilliz RAG - 智能问答系统</title>
+    <title>AWS Zilliz RAG - Intelligent Q&A System</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="/static/js/config.js"></script>
+    <script type="module" src="/static/js/i18n/i18n.js"></script>
     <meta name="api-url" content="">
     <meta name="cloudfront-url" content=""></head>
 <body>
@@ -22,27 +23,36 @@
                 <ul>
                     <li class="nav-item active" data-tab="chat">
                         <i class="fas fa-comments"></i>
-                        <span>对话</span>
+                        <span data-i18n="nav.chat">Chat</span>
                     </li>
                     <li class="nav-item" data-tab="documents">
                         <i class="fas fa-file-alt"></i>
-                        <span>文档管理</span>
+                        <span data-i18n="nav.documents">Documents</span>
                     </li>
                     <li class="nav-item" data-tab="search">
                         <i class="fas fa-search"></i>
-                        <span>向量搜索</span>
+                        <span data-i18n="nav.search">Vector Search</span>
                     </li>
                     <li class="nav-item" data-tab="settings">
                         <i class="fas fa-cog"></i>
-                        <span>设置</span>
+                        <span data-i18n="nav.settings">Settings</span>
                     </li>
                 </ul>
             </nav>
             
             <div class="sidebar-footer">
+                <!-- 语言切换器 -->
+                <div class="language-selector">
+                    <select id="language-select" class="language-dropdown">
+                        <option value="en">English</option>
+                        <option value="zh">中文</option>
+                        <option value="ja">日本語</option>
+                    </select>
+                </div>
+                
                 <div class="connection-status">
                     <span class="status-indicator" id="status-indicator"></span>
-                    <span id="status-text">未连接</span>
+                    <span id="status-text" data-i18n="status.disconnected">Disconnected</span>
                 </div>
             </div>
         </aside>
@@ -52,9 +62,9 @@
             <!-- 聊天界面 -->
             <section id="chat-tab" class="tab-content active">
                 <div class="chat-header">
-                    <h1>智能问答助手</h1>
+                    <h1 data-i18n="chat.title">Intelligent Q&A Assistant</h1>
                     <button class="btn-clear" id="clear-chat">
-                        <i class="fas fa-broom"></i> 清空对话
+                        <i class="fas fa-broom"></i> <span data-i18n="chat.clearChat">Clear Chat</span>
                     </button>
                 </div>
                 
@@ -63,17 +73,17 @@
                         <div class="welcome-icon">
                             <i class="fas fa-robot fa-3x"></i>
                         </div>
-                        <h2>欢迎使用RAG智能问答系统</h2>
-                        <p>我可以基于已上传的文档回答您的问题</p>
+                        <h2 data-i18n="chat.welcome">Welcome to RAG Intelligent Q&A System</h2>
+                        <p data-i18n="chat.welcomeDesc">I can answer your questions based on uploaded documents</p>
                         <div class="quick-actions">
-                            <button class="quick-action" data-question="什么是RAG？">
-                                <i class="fas fa-question-circle"></i> 什么是RAG？
+                            <button class="quick-action" data-question="What is RAG?">
+                                <i class="fas fa-question-circle"></i> <span data-i18n="quickActions.whatIsRAG">What is RAG?</span>
                             </button>
-                            <button class="quick-action" data-question="RAG有哪些优势？">
-                                <i class="fas fa-star"></i> RAG有哪些优势？
+                            <button class="quick-action" data-question="What are the advantages of RAG?">
+                                <i class="fas fa-star"></i> <span data-i18n="quickActions.advantages">What are the advantages of RAG?</span>
                             </button>
-                            <button class="quick-action" data-question="如何使用这个系统？">
-                                <i class="fas fa-info-circle"></i> 如何使用？
+                            <button class="quick-action" data-question="How to use this system?">
+                                <i class="fas fa-info-circle"></i> <span data-i18n="quickActions.howToUse">How to use this system?</span>
                             </button>
                         </div>
                     </div>
@@ -84,7 +94,8 @@
                         <textarea 
                             id="chat-input" 
                             class="chat-input" 
-                            placeholder="输入您的问题..."
+                            data-i18n="chat.inputPlaceholder"
+                            placeholder="Enter your question..."
                             rows="1"
                         ></textarea>
                         <button id="send-btn" class="send-btn" disabled>
@@ -98,7 +109,7 @@
                         </label>
                         <label class="option-label">
                             <input type="checkbox" id="show-sources" checked>
-                            <span>显示引用源</span>
+                            <span data-i18n="chat.showSources">Show Sources</span>
                         </label>
                     </div>
                 </div>
@@ -107,35 +118,35 @@
             <!-- 文档管理界面 -->
             <section id="documents-tab" class="tab-content">
                 <div class="documents-header">
-                    <h1>文档管理</h1>
+                    <h1 data-i18n="documents.title">Document Management</h1>
                     <button class="btn-primary" id="upload-btn">
-                        <i class="fas fa-upload"></i> 上传文档
+                        <i class="fas fa-upload"></i> <span data-i18n="documents.upload">Upload Documents</span>
                     </button>
                 </div>
                 
                 <div class="upload-area" id="upload-area">
                     <i class="fas fa-cloud-upload-alt fa-3x"></i>
-                    <p>拖拽文件到此处或点击上传</p>
-                    <p class="upload-hint">支持 .txt, .pdf, .md 格式</p>
+                    <p data-i18n="documents.dragDrop">Drag and drop files here or click to browse</p>
+                    <p class="upload-hint" data-i18n="documents.supportedFormats">Supported: PDF, TXT, MD, DOCX</p>
                     <input type="file" id="file-input" multiple accept=".txt,.pdf,.md" hidden>
                 </div>
                 
                 <div class="documents-list">
-                    <h3>已上传文档</h3>
+                    <h3 data-i18n="documents.title">Documents</h3>
                     <div id="documents-container" class="documents-container">
-                        <p class="no-documents">暂无文档</p>
+                        <p class="no-documents" data-i18n="documents.noDocuments">No documents uploaded yet</p>
                     </div>
                 </div>
                 
                 <div class="stats-panel">
-                    <h3>系统统计</h3>
+                    <h3>Statistics</h3>
                     <div class="stats-grid" id="stats-grid">
                         <div class="stat-item">
-                            <span class="stat-label">向量维度</span>
+                            <span class="stat-label">Vector Dimension</span>
                             <span class="stat-value" id="stat-dimension">0</span>
                         </div>
                         <div class="stat-item">
-                            <span class="stat-label">集合名称</span>
+                            <span class="stat-label">Collection Name</span>
                             <span class="stat-value" id="stat-collection">-</span>
                         </div>
                     </div>
@@ -145,7 +156,7 @@
             <!-- 向量搜索界面 -->
             <section id="search-tab" class="tab-content">
                 <div class="search-header">
-                    <h1>向量搜索</h1>
+                    <h1 data-i18n="search.title">Vector Search</h1>
                 </div>
                 
                 <div class="search-container">
@@ -154,22 +165,23 @@
                             type="text" 
                             id="search-input" 
                             class="search-input" 
-                            placeholder="输入搜索内容..."
+                            data-i18n="search.placeholder"
+                            placeholder="Enter search keywords..."
                         >
                         <button id="search-btn" class="btn-primary">
-                            <i class="fas fa-search"></i> 搜索
+                            <i class="fas fa-search"></i> <span data-i18n="search.search">Search</span>
                         </button>
                     </div>
                     
                     <div class="search-options">
                         <label class="option-label">
-                            <span>返回结果数:</span>
+                            <span data-i18n="search.topK">Top K Results</span>
                             <input type="number" id="search-top-k" value="10" min="1" max="50">
                         </label>
                     </div>
                     
                     <div class="search-results" id="search-results">
-                        <p class="no-results">输入关键词开始搜索</p>
+                        <p class="no-results" data-i18n="search.noResults">No results found</p>
                     </div>
                 </div>
             </section>
@@ -177,20 +189,20 @@
             <!-- 设置界面 -->
             <section id="settings-tab" class="tab-content">
                 <div class="settings-header">
-                    <h1>系统设置</h1>
+                    <h1 data-i18n="settings.title">Settings</h1>
                 </div>
                 
                 <div class="settings-container">
                     <div class="settings-group">
-                        <h3>API配置</h3>
+                        <h3>API Configuration</h3>
                         <div class="setting-item">
-                            <label>API服务器地址</label>
+                            <label>API Server URL</label>
                             <input type="text" id="api-url" value="http://localhost:8000" class="setting-input">
                         </div>
                     </div>
                     
                     <div class="settings-group">
-                        <h3>模型参数</h3>
+                        <h3 data-i18n="settings.model">Model Settings</h3>
                         <div class="setting-item">
                             <label>Temperature (0-1)</label>
                             <input type="number" id="temperature" value="0.7" min="0" max="1" step="0.1" class="setting-input">
@@ -202,25 +214,25 @@
                     </div>
                     
                     <div class="settings-group">
-                        <h3>界面设置</h3>
+                        <h3 data-i18n="settings.interface">Interface Settings</h3>
                         <div class="setting-item">
                             <label>
-                                <input type="checkbox" id="dark-mode"> 深色模式
+                                <input type="checkbox" id="dark-mode"> <span data-i18n="settings.darkMode">Dark Mode</span>
                             </label>
                         </div>
                         <div class="setting-item">
                             <label>
-                                <input type="checkbox" id="auto-scroll" checked> 自动滚动到最新消息
+                                <input type="checkbox" id="auto-scroll" checked> <span data-i18n="settings.autoScroll">Auto-scroll to latest message</span>
                             </label>
                         </div>
                     </div>
                     
                     <div class="settings-actions">
                         <button class="btn-primary" id="save-settings">
-                            <i class="fas fa-save"></i> 保存设置
+                            <i class="fas fa-save"></i> <span data-i18n="settings.save">Save Settings</span>
                         </button>
                         <button class="btn-secondary" id="reset-settings">
-                            <i class="fas fa-undo"></i> 重置默认
+                            <i class="fas fa-undo"></i> <span data-i18n="settings.reset">Reset to Default</span>
                         </button>
                     </div>
                 </div>
@@ -231,7 +243,7 @@
     <!-- 加载提示 -->
     <div class="loading-overlay" id="loading-overlay">
         <div class="spinner"></div>
-        <p id="loading-text">处理中...</p>
+        <p id="loading-text" data-i18n="chat.processing">Processing...</p>
     </div>
     
     <!-- 消息模板 -->

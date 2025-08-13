@@ -71,7 +71,8 @@ class ChatManager {
         this.addMessage(question, 'user');
 
         // 显示加载状态
-        const loadingMessage = this.addMessage('正在思考...', 'assistant', true);
+        const thinkingText = window.i18n ? window.i18n.t('chat.thinking') : 'Thinking...';
+        const loadingMessage = this.addMessage(thinkingText, 'assistant', true);
 
         try {
             // 调用API
@@ -90,14 +91,16 @@ class ChatManager {
                     this.addSources(answerElement, response.sources, response.confidence);
                 }
             } else {
-                this.addMessage('抱歉，无法生成答案。请检查系统是否正常运行。', 'assistant');
+                const noAnswerText = window.i18n ? window.i18n.t('chat.noAnswer') : 'No answer found';
+                this.addMessage(noAnswerText, 'assistant');
             }
         } catch (error) {
             // 移除加载消息
             loadingMessage.remove();
             
             // 显示错误消息
-            this.addMessage('发生错误：' + error.message, 'assistant');
+            const errorText = window.i18n ? window.i18n.t('chat.error') : 'Error occurred';
+            this.addMessage(errorText + ': ' + error.message, 'assistant');
         }
 
         // 滚动到底部

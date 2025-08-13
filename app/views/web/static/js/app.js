@@ -4,6 +4,22 @@ let chatManager, documentManager, searchManager;
 // 初始化应用
 document.addEventListener('DOMContentLoaded', async () => {
     try {
+        // 初始化多语言系统
+        if (window.i18n) {
+            await window.i18n.loadTranslations();
+            window.i18n.updateUI();
+            
+            // 监听语言切换
+            const langSelect = document.getElementById('language-select');
+            if (langSelect) {
+                langSelect.value = window.i18n.currentLang;
+                langSelect.addEventListener('change', (e) => {
+                    window.i18n.setLanguage(e.target.value);
+                    updateDynamicTexts(); // 更新动态文本
+                });
+            }
+        }
+        
         // 确保API客户端配置已加载
         if (window.apiClient && window.apiClient.initializeConfig) {
             await window.apiClient.initializeConfig();
@@ -31,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 显示错误信息给用户
         const statusText = document.getElementById('status-text');
         if (statusText) {
-            statusText.textContent = '初始化失败';
+            statusText.textContent = window.i18n ? window.i18n.t('status.error') : 'Error';
         }
     }
 });
@@ -91,7 +107,7 @@ async function initSettings() {
         // 验证设置
         const validation = window.configManager.validateSettings(settings);
         if (!validation.valid) {
-            alert('设置无效:\n' + validation.errors.join('\n'));
+            alert((window.i18n ? window.i18n.t('common.error') : 'Error') + ':\n' + validation.errors.join('\n'));
             return;
         }
         
@@ -99,23 +115,23 @@ async function initSettings() {
         if (window.configManager.saveSettings(settings)) {
             // 应用设置
             applySettings(settings);
-            alert('设置已保存');
+            alert(window.i18n ? window.i18n.t('settings.saveSuccess') : 'Settings saved');
         } else {
-            alert('保存设置失败');
+            alert(window.i18n ? window.i18n.t('common.error') : 'Save failed');
         }
     });
     
     // 重置设置
     resetBtn.addEventListener('click', async () => {
-        if (confirm('确定要重置所有设置吗？')) {
+        if (confirm(window.i18n ? window.i18n.t('settings.resetConfirm') : 'Reset all settings?')) {
             try {
                 // 使用ConfigManager重置设置
                 await window.configManager.resetToDefaults();
                 await loadSettings();
-                alert('设置已重置为默认值');
+                alert(window.i18n ? window.i18n.t('common.success') : 'Settings reset');
             } catch (error) {
                 console.error('Failed to reset settings:', error);
-                alert('重置设置失败');
+                alert(window.i18n ? window.i18n.t('common.error') : 'Reset failed');
             }
         }
     });
@@ -195,7 +211,7 @@ async function checkServerConnection() {
         
         if (health && health.status === 'healthy') {
             statusIndicator.classList.add('connected');
-            statusText.textContent = '已连接';
+            statusText.textContent = window.i18n ? window.i18n.t('status.connected') : 'Connected';
             
             // 启用聊天输入
             document.getElementById('chat-input').disabled = false;
@@ -205,7 +221,7 @@ async function checkServerConnection() {
         }
     } catch (error) {
         statusIndicator.classList.remove('connected');
-        statusText.textContent = '未连接';
+        statusText.textContent = window.i18n ? window.i18n.t('status.disconnected') : 'Disconnected';
         
         // 禁用聊天输入
         document.getElementById('chat-input').disabled = true;
@@ -214,7 +230,10 @@ async function checkServerConnection() {
 }
 
 // 显示加载提示
-function showLoading(text = '处理中...') {
+function showLoading(text) {
+    if (!text) {
+        text = window.i18n ? window.i18n.t('chat.processing') : 'Processing...';
+    }
     const overlay = document.getElementById('loading-overlay');
     const loadingText = document.getElementById('loading-text');
     
@@ -230,14 +249,33 @@ function hideLoading() {
 
 // 格式化时间
 function formatTime(date) {
-    return new Date(date).toLocaleTimeString('zh-CN', {
+    const lang = window.i18n ? window.i18n.currentLang : 'en';
+    const locale = lang === 'zh' ? 'zh-CN' : lang === 'ja' ? 'ja-JP' : 'en-US';
+    return new Date(date).toLocaleTimeString(locale, {
         hour: '2-digit',
         minute: '2-digit'
     });
 }
 
+// 更新动态文本
+function updateDynamicTexts() {
+    // 更新速助问题按钮
+    const quickActions = document.querySelectorAll('.quick-action');
+    quickActions.forEach((btn, index) => {
+        const keys = ['quickActions.whatIsRAG', 'quickActions.advantages', 'quickActions.howToUse'];
+        if (window.i18n && keys[index]) {
+            const text = window.i18n.t(keys[index]);
+            btn.innerHTML = btn.innerHTML.replace(/>.*?<\/button>/, `>${text}</button>`);
+            btn.dataset.question = text;
+        }
+    });
+}
+
 // 处理错误
-function handleError(error, message = '操作失败') {
+function handleError(error, message) {
+    if (!message) {
+        message = window.i18n ? window.i18n.t('common.error') : 'Operation failed';
+    }
     console.error(error);
     alert(message + ': ' + error.message);
 }
