@@ -88,7 +88,7 @@ make show-config
 make bootstrap
 
 # Deploy application
-make deploy-v2           # Interactive deployment (default target)
+make deploy           # Interactive deployment (default target)
 
 # Development related
 make test               # Run tests
@@ -129,7 +129,7 @@ make deploy
 
 **Quick deployment**:
 ```bash
-make deploy-v2 
+make deploy 
 ```
 
 #### 🔧 Development Workflow
@@ -407,7 +407,7 @@ The system automatically collects the following metrics:
 ```bash
 make kill-cdk  # Kill conflicting processes
 make clean     # Clean output directory
-make deploy-v2   # Redeploy
+make deploy   # Redeploy
 ```
 
 **Q: Lambda function timeout**
@@ -444,7 +444,7 @@ cd AWS-Zilliz-RAG
 # Install dependencies and deploy
 make install
 make bootstrap  # Required for first deployment
-make deploy-v2
+make deploy
 ```
 
 ### Production Deployment Checklist
@@ -453,7 +453,7 @@ make deploy-v2
 - [ ] Check security configuration
 - [ ] Configure monitoring alerts
 - [ ] Prepare rollback plan
-- [ ] Execute deployment `make deploy-v2`
+- [ ] Execute deployment `make deploy`
 
 ## Contributing Guide
 

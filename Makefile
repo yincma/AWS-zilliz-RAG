@@ -1,7 +1,11 @@
-# AWS RAG Application Makefile V2
+# AWS RAG Application Makefile
 # 自动化部署，包含所有修复
 
-.PHONY: help install clean deploy destroy test lint synth diff deploy-v2 generate-config update-frontend
+.PHONY: help install clean deploy destroy test lint synth diff generate-config update-frontend \
+	check-tools check-env bootstrap build-lambda build-lambda-fixed build-lambda-layer build-lambda-zip \
+	deploy-with-layer deploy-lambda-direct update-lambda-env list-lambda logs-lambda \
+	deploy-data deploy-api deploy-web _update_frontend_common \
+	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper
 
 # 设置默认目标
 .DEFAULT_GOAL := help
@@ -22,13 +26,37 @@ USE_API_V2 ?= true
 # - app_v2.py: 创建 RAG-API-prod 栈（备用）
 CDK_APP := app_v2.py
 
+# 动态获取的值（避免硬编码）
+ACCOUNT_ID ?= $(shell aws sts get-caller-identity --query Account --output text 2>/dev/null)
+CDK_BOOTSTRAP_QUALIFIER ?= hnb659fds
+OS_TYPE := $(shell uname -s)
+
+# S3桶名称模板（使用变量而非硬编码）
+S3_BUCKET_DOCUMENTS ?= rag-documents-$(ACCOUNT_ID)-$(AWS_REGION)
+S3_BUCKET_WEB ?= rag-web-$(ACCOUNT_ID)-$(AWS_REGION)
+
 # 确保CDK使用正确的区域
 export CDK_DEFAULT_REGION := $(AWS_REGION)
 export AWS_DEFAULT_REGION := $(AWS_REGION)
 
+# 通用AWS环境变量设置
+define SET_AWS_ENV
+	AWS_REGION=$(AWS_REGION) \
+	AWS_DEFAULT_REGION=$(AWS_REGION) \
+	CDK_DEFAULT_REGION=$(AWS_REGION)
+endef
+
+# 通用CDK环境变量设置
+define SET_CDK_ENV
+	$(SET_AWS_ENV) \
+	USE_API_V2=$(USE_API_V2) \
+	USE_LAYER=$(USE_LAYER) \
+	STAGE=$(STAGE)
+endef
+
 # 帮助信息
 help:
-	@echo "AWS RAG Application V2 - 可用命令:"
+	@echo "AWS RAG Application - 可用命令:"
 	@echo ""
 	@echo "📦 环境管理:"
 	@echo "  make install          - 安装所有依赖"
@@ -42,16 +70,13 @@ help:
 	@echo "  make update-lambda-env    - 更新Lambda环境变量"
 	@echo "  make logs-lambda          - 查看Lambda日志"
 	@echo ""
-	@echo "☁️  部署管理 (推荐):"
-	@echo "  make deploy-v2        - 完整部署（使用改进的V2栈）"
+	@echo "☁️  部署管理:"
+	@echo "  make deploy           - 完整部署应用到AWS"
 	@echo "  make deploy-with-layer - 使用Lambda Layer部署（解决大包问题）"
-	@echo "  make update-frontend  - 仅更新前端配置"
-	@echo "  make generate-config  - 生成前端API配置"
-	@echo ""
-	@echo "☁️  部署管理 (传统):"
-	@echo "  make deploy           - 部署应用到AWS（原始版本）"
 	@echo "  make deploy-web       - 仅部署Web栈"
 	@echo "  make deploy-api       - 仅部署API栈"
+	@echo "  make update-frontend  - 仅更新前端配置"
+	@echo "  make generate-config  - 生成前端API配置"
 	@echo "  make destroy          - 销毁所有资源"
 	@echo ""
 	@echo "🔍 CDK操作:"
@@ -70,8 +95,18 @@ help:
 	@echo "  make fix-cloudfront   - 修复CloudFront配置"
 	@echo "  make verify-deploy    - 验证部署状态"
 
+# 检查必要工具
+check-tools:
+	@echo "🔍 检查必要工具..."
+	@which aws >/dev/null 2>&1 || { echo "❌ 需要安装 AWS CLI"; exit 1; }
+	@which jq >/dev/null 2>&1 || { echo "❌ 需要安装 jq"; exit 1; }
+	@which python3 >/dev/null 2>&1 || { echo "❌ 需要安装 Python3"; exit 1; }
+	@which npm >/dev/null 2>&1 || { echo "⚠️  建议安装 npm (用于CDK)"; }
+	@which docker >/dev/null 2>&1 || { echo "⚠️  建议安装 Docker (用于Lambda构建)"; }
+	@echo "✅ 工具检查完成"
+
 # 安装依赖
-install:
+install: check-tools
 	@echo "📦 安装依赖..."
 	pip install -r requirements.txt
 	pip install -r requirements-dev.txt
@@ -108,30 +143,24 @@ bootstrap:
 	@echo "✅ CDK Bootstrap 完成！"
 	@echo ""
 	@echo "Bootstrap 已创建："
-	@echo "  - S3 存储桶：cdk-hnb659fds-assets-*"
-	@echo "  - IAM 角色：cdk-hnb659fds-*-role"
-	@echo "  - SSM 参数：/cdk-bootstrap/hnb659fds/version"
+	@echo "  - S3 存储桶：cdk-$(CDK_BOOTSTRAP_QUALIFIER)-assets-*"
+	@echo "  - IAM 角色：cdk-$(CDK_BOOTSTRAP_QUALIFIER)-*-role"
+	@echo "  - SSM 参数：/cdk-bootstrap/$(CDK_BOOTSTRAP_QUALIFIER)/version"
 	@echo ""
-	@echo "现在可以运行 'make deploy-v2' 部署应用"
+	@echo "现在可以运行 'make deploy' 部署应用"
 
 # 合成CloudFormation模板
 synth:
 	@echo "🔧 合成CloudFormation模板..."
 	cd infrastructure && \
-		AWS_REGION=$(AWS_REGION) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		USE_API_V2=$(USE_API_V2) \
+		$(SET_CDK_ENV) \
 		cdk synth --app "python3 $(CDK_APP)"
 
 # 查看差异
 diff:
 	@echo "🔍 查看部署差异..."
 	cd infrastructure && \
-		AWS_REGION=$(AWS_REGION) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		USE_API_V2=$(USE_API_V2) \
+		$(SET_CDK_ENV) \
 		cdk diff --app "python3 $(CDK_APP)"
 
 # 构建Lambda ZIP包（根据USE_LAYER环境变量选择模式）
@@ -156,12 +185,12 @@ sync-cors-helper:
 redeploy-lambda: build-lambda
 	@echo "🚀 快速重新部署Lambda函数..."
 	cd infrastructure && \
-	AWS_REGION=$(AWS_REGION) \
+		$(SET_AWS_ENV) \
 		cdk deploy RAG-API-$(STAGE) \
 		--app "python3 app.py" \
 		--require-approval never
 	@echo "✅ Lambda重新部署完成！"
-	@$(MAKE) update-frontend-v2
+	@$(MAKE) update-frontend
 
 # 测试Lambda函数
 test-lambda:
@@ -200,6 +229,7 @@ build-lambda-fixed:
 	
 	# 使用Docker构建依赖（Linux兼容）
 	@echo "🐳 使用Docker构建Linux兼容依赖..."
+	@which docker >/dev/null 2>&1 || { echo "❌ Docker未安装，无法构建Linux兼容包"; exit 1; }
 	@docker run --rm \
 		-v $$(pwd):/workspace \
 		-w /workspace \
@@ -237,7 +267,7 @@ build-lambda-zip:
 # 使用Lambda Layer部署（解决大包问题）
 deploy-with-layer:
 	@echo "🚀 使用Lambda Layer模式部署..."
-	@export USE_LAYER=true && $(MAKE) deploy-v2
+	@export USE_LAYER=true && $(MAKE) deploy
 
 # 直接部署Lambda函数（不通过CDK）
 deploy-lambda-direct: build-lambda-fixed
@@ -278,31 +308,47 @@ deploy-lambda-direct: build-lambda-fixed
 update-lambda-env:
 	@echo "🔧 更新Lambda环境变量..."
 	
-	# 创建环境变量JSON文件
-	@echo '{"Variables": {' > env-vars-temp.json
-	@echo '  "S3_BUCKET": "rag-documents-375004070918-$(AWS_REGION)",' >> env-vars-temp.json
-	@echo '  "ZILLIZ_COLLECTION": "$(ZILLIZ_COLLECTION)",' >> env-vars-temp.json
-	@echo '  "AWS_REGION_NAME": "$(AWS_REGION)",' >> env-vars-temp.json
-	@echo '  "ZILLIZ_ENDPOINT": "$(ZILLIZ_ENDPOINT)",' >> env-vars-temp.json
-	@echo '  "ZILLIZ_TOKEN": "$(ZILLIZ_TOKEN)",' >> env-vars-temp.json
-	@echo '  "BEDROCK_MODEL_ID": "$(BEDROCK_MODEL_ID)",' >> env-vars-temp.json
-	@echo '  "EMBEDDING_MODEL_ID": "$(EMBEDDING_MODEL_ID)"' >> env-vars-temp.json
-	@echo '}}' >> env-vars-temp.json
+	# 验证敏感变量存在
+	@if [ -z "$(ZILLIZ_TOKEN)" ]; then \
+		echo "❌ ZILLIZ_TOKEN 未设置"; \
+		exit 1; \
+	fi
+	
+	# 创建环境变量JSON（使用临时文件避免命令行暴露）
+	@cat > env-vars-temp.json <<-EOF
+	{
+	  "Variables": {
+	    "S3_BUCKET": "$(S3_BUCKET_DOCUMENTS)",
+	    "ZILLIZ_COLLECTION": "$(ZILLIZ_COLLECTION)",
+	    "AWS_REGION_NAME": "$(AWS_REGION)",
+	    "ZILLIZ_ENDPOINT": "$(ZILLIZ_ENDPOINT)",
+	    "ZILLIZ_TOKEN": "$(ZILLIZ_TOKEN)",
+	    "BEDROCK_MODEL_ID": "$(BEDROCK_MODEL_ID)",
+	    "EMBEDDING_MODEL_ID": "$(EMBEDDING_MODEL_ID)"
+	  }
+	}
+	EOF
+	
+	# 设置文件权限（仅用户可读）
+	@chmod 600 env-vars-temp.json
 	
 	# 更新Query Lambda环境变量
 	@aws lambda update-function-configuration \
 		--function-name rag-query-handler \
 		--environment file://env-vars-temp.json \
 		--region $(AWS_REGION) \
-		--output json | jq '{FunctionName, State}' || true
+		--output json 2>/dev/null | jq '{FunctionName, State}' || \
+		echo "⚠️  Query Lambda配置更新可能失败"
 	
 	# 更新Ingest Lambda环境变量
 	@aws lambda update-function-configuration \
 		--function-name rag-ingest-handler \
 		--environment file://env-vars-temp.json \
 		--region $(AWS_REGION) \
-		--output json | jq '{FunctionName, State}' || true
+		--output json 2>/dev/null | jq '{FunctionName, State}' || \
+		echo "⚠️  Ingest Lambda配置更新可能失败"
 	
+	# 安全删除临时文件
 	@rm -f env-vars-temp.json
 	@echo "✅ 环境变量更新完成"
 
@@ -317,9 +363,14 @@ list-lambda:
 logs-lambda:
 	@echo "📋 查看Lambda日志..."
 	@echo "Query Lambda最近日志："
-	@aws logs filter-log-events \
+	@if [ "$(OS_TYPE)" = "Darwin" ]; then \
+		START_TIME=$$(date -u -v-5M +%s)000; \
+	else \
+		START_TIME=$$(date -u -d '5 minutes ago' +%s)000; \
+	fi; \
+	aws logs filter-log-events \
 		--log-group-name /aws/lambda/rag-query-handler \
-		--start-time $$(date -u -v-5M +%s)000 \
+		--start-time $$START_TIME \
 		--region $(AWS_REGION) \
 		--query 'events[-10:].message' \
 		--output text
@@ -327,9 +378,9 @@ logs-lambda:
 	@echo "如需实时日志，运行："
 	@echo "  aws logs tail /aws/lambda/rag-query-handler --follow --region $(AWS_REGION)"
 
-# 完整部署V2（推荐）
-deploy-v2: check-env build-lambda
-	@echo "🚀 部署RAG应用 V2（包含所有修复）..."
+# 完整部署（推荐）
+deploy: check-env build-lambda
+	@echo "🚀 部署RAG应用（包含所有修复）..."
 	@echo "  使用API V2: $(USE_API_V2)"
 	@echo "  使用Layer模式: $(USE_LAYER)"
 	@echo "  阶段: $(STAGE)"
@@ -366,10 +417,7 @@ deploy-v2: check-env build-lambda
 deploy-data:
 	@echo "🗄️ 部署数据栈..."
 	cd infrastructure && \
-		AWS_REGION=$(AWS_REGION) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		USE_API_V2=$(USE_API_V2) \
+		$(SET_CDK_ENV) \
 		cdk deploy RAG-Data-$(STAGE) \
 		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
@@ -377,12 +425,9 @@ deploy-data:
 
 # 仅部署API栈
 deploy-api:
-	@echo "⚡ 部署API栈 V2..."
+	@echo "⚡ 部署API栈..."
 	cd infrastructure && \
-		AWS_REGION=$(AWS_REGION) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		USE_API_V2=$(USE_API_V2) \
+		$(SET_CDK_ENV) \
 		cdk deploy RAG-API-$(STAGE) \
 		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
@@ -395,10 +440,7 @@ deploy-api:
 deploy-web:
 	@echo "🌐 部署Web栈..."
 	cd infrastructure && \
-		AWS_REGION=$(AWS_REGION) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		USE_API_V2=$(USE_API_V2) \
+		$(SET_CDK_ENV) \
 		cdk deploy RAG-Web-$(STAGE) \
 		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
@@ -411,48 +453,13 @@ generate-config:
 	export CDK_STACK_NAME=RAG-API-$(STAGE) && \
 	STAGE=$(STAGE) python3 scripts/generate_frontend_config.py
 
-# 更新前端文件（旧版本，保留兼容性）
-update-frontend: generate-config
+# 通用前端更新函数
+_update_frontend_common:
 	@echo "📤 更新前端文件到S3..."
-	
-	# 获取S3桶名称
-	$(eval BUCKET_NAME := $(shell aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text 2>/dev/null || echo ""))
-	
-	@if [ -z "$(BUCKET_NAME)" ]; then \
-		echo "⚠️ 未找到旧栈，尝试新栈..."; \
-		$(MAKE) update-frontend-v2; \
-	else \
-		echo "📦 同步文件到S3: $(BUCKET_NAME)"; \
-		aws s3 sync app/views/web/ s3://$(BUCKET_NAME)/ \
-			--exclude "*.backup*" \
-			--exclude ".git/*" \
-			--exclude "*.DS_Store" \
-			--cache-control "max-age=3600"; \
-		echo "🔄 清除CloudFront缓存..."; \
-		DISTRIBUTION_ID=$$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text 2>/dev/null || echo ""); \
-		if [ -n "$$DISTRIBUTION_ID" ]; then \
-			aws cloudfront create-invalidation \
-				--distribution-id $$DISTRIBUTION_ID \
-				--paths "/*" > /dev/null; \
-			echo "✅ CloudFront 缓存已清除"; \
-		else \
-			echo "⚠️ 未找到 CloudFront Distribution ID，跳过缓存清除"; \
-		fi; \
-		echo "✅ 前端更新完成"; \
-	fi
-
-# 更新前端文件（新版本，用于统一的栈命名）
-update-frontend-v2: generate-config
-	@echo "📤 更新前端文件到S3..."
-	
-	# 获取S3桶名称 - 从 Web 栈获取
-	$(eval BUCKET_NAME := $(shell aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text 2>/dev/null || echo ""))
-	
-	@if [ -z "$(BUCKET_NAME)" ]; then \
-		ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text); \
-		BUCKET_NAME="rag-web-$$ACCOUNT_ID-$(AWS_REGION)"; \
-		echo "⚠️ 使用默认桶名: $$BUCKET_NAME"; \
-	fi
+	$(eval BUCKET_NAME := $(shell aws cloudformation describe-stacks \
+		--stack-name RAG-Web-$(STAGE) \
+		--query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
+		--output text 2>/dev/null || echo "$(S3_BUCKET_WEB)"))
 	
 	@if [ -n "$(BUCKET_NAME)" ] && [ -d app/views/web ]; then \
 		echo "📦 同步文件到S3: $(BUCKET_NAME)"; \
@@ -462,19 +469,25 @@ update-frontend-v2: generate-config
 			--exclude "*.DS_Store" \
 			--cache-control "max-age=3600"; \
 		echo "🔄 清除CloudFront缓存..."; \
-		DISTRIBUTION_ID=$$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' --output text 2>/dev/null || echo ""); \
+		DISTRIBUTION_ID=$$(aws cloudformation describe-stacks \
+			--stack-name RAG-Web-$(STAGE) \
+			--query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' \
+			--output text 2>/dev/null); \
 		if [ -n "$$DISTRIBUTION_ID" ]; then \
 			aws cloudfront create-invalidation \
 				--distribution-id $$DISTRIBUTION_ID \
 				--paths "/*" > /dev/null; \
 			echo "✅ CloudFront 缓存已清除"; \
 		else \
-			echo "⚠️ 未找到 CloudFront Distribution ID"; \
+			echo "⚠️  未找到 CloudFront Distribution ID"; \
 		fi; \
-		echo "✅ 前端更新完成 (V2)"; \
+		echo "✅ 前端更新完成"; \
 	else \
 		echo "❌ 无法更新前端：S3桶或前端目录不存在"; \
 	fi
+
+# 更新前端文件
+update-frontend: generate-config _update_frontend_common
 
 # 修复CORS问题
 fix-cors:
@@ -543,9 +556,7 @@ destroy:
 	@read -p "确定要销毁所有资源吗？(y/N) " confirm && \
 	if [ "$$confirm" = "y" ]; then \
 		cd infrastructure && \
-		AWS_REGION=$(AWS_REGION) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
+		$(SET_AWS_ENV) \
 		cdk destroy --all --app "python3 $(CDK_APP)" --force; \
 	else \
 		echo "取消销毁"; \
@@ -558,11 +569,15 @@ check-env:
 		echo "❌ AWS_REGION未设置"; \
 		exit 1; \
 	fi
-	@echo "✅ 环境配置正确"
-
-# 传统部署（兼容旧版）
-deploy: deploy-v2
+	@if [ -f .env ]; then \
+		chmod 600 .env; \
+		echo "✅ .env文件权限已设置为600"; \
+	fi
+	@if [ -z "$(ZILLIZ_TOKEN)" ] || [ -z "$(ZILLIZ_ENDPOINT)" ]; then \
+		echo "⚠️  Zilliz配置可能不完整"; \
+	fi
+	@echo "✅ 环境配置检查完成"
 
 # 一键部署和测试
-all: clean install deploy-v2 verify-deploy test-api
+all: clean install deploy verify-deploy test-api
 	@echo "🎉 完整部署和测试完成！"

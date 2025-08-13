@@ -88,7 +88,7 @@ make show-config
 make bootstrap
 
 # 部署应用
-make deploy-v2           # 交互式部署（默认目标）
+make deploy           # 交互式部署（默认目标）
 
 # 开发相关
 make test               # 运行测试
@@ -129,7 +129,7 @@ make deploy
 
 **快速部署**：
 ```bash
-make deploy-v2 
+make deploy 
 ```
 
 
@@ -407,7 +407,7 @@ aws logs tail /aws/lambda/RAG-Query-dev --follow
 ```bash
 make kill-cdk  # 终止冲突进程
 make clean     # 清理输出目录
-make deploy-v2   # 重新部署
+make deploy   # 重新部署
 ```
 
 **Q: Lambda函数超时**
@@ -444,7 +444,7 @@ cd AWS-Zilliz-RAG
 # 安装依赖并部署
 make install
 make bootstrap  # 首次部署必需
-make deploy-v2
+make deploy
 ```
 
 ### 生产部署清单
@@ -453,7 +453,7 @@ make deploy-v2
 - [ ] 检查安全配置
 - [ ] 配置监控告警
 - [ ] 准备回滚方案
-- [ ] 执行部署 `make deploy-v2`
+- [ ] 执行部署 `make deploy`
 
 ## 贡献指南
 
