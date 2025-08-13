@@ -551,13 +551,17 @@ test-ui:
 	python3 tests/test_ui_functionality.py
 
 # 销毁资源
-destroy:
+destroy: build-lambda
 	@echo "💥 销毁所有CDK资源..."
 	@read -p "确定要销毁所有资源吗？(y/N) " confirm && \
 	if [ "$$confirm" = "y" ]; then \
 		cd infrastructure && \
 		$(SET_AWS_ENV) \
-		cdk destroy --all --app "python3 $(CDK_APP)" --force; \
+		cdk destroy --all --app "python3 $(CDK_APP)" --force && \
+		cd .. && \
+		echo "🧹 清理临时构建目录..." && \
+		rm -rf lambda_build_temp && \
+		echo "✅ 临时目录已清理"; \
 	else \
 		echo "取消销毁"; \
 	fi
