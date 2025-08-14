@@ -2,8 +2,8 @@
 # 自动化部署，包含所有修复
 
 .PHONY: help install clean deploy destroy test lint synth diff generate-config update-frontend \
-	check-tools check-env bootstrap build-lambda build-lambda-fixed build-lambda-layer build-lambda-zip \
-	deploy-with-layer deploy-lambda-direct update-lambda-env list-lambda logs-lambda \
+	check-tools check-env bootstrap build-lambda build-lambda-fixed build-lambda-zip \
+	deploy-lambda-direct update-lambda-env list-lambda logs-lambda \
 	deploy-data deploy-api deploy-web _update_frontend_common \
 	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper
 
@@ -50,7 +50,6 @@ endef
 define SET_CDK_ENV
 	$(SET_AWS_ENV) \
 	USE_API_V2=$(USE_API_V2) \
-	USE_LAYER=$(USE_LAYER) \
 	STAGE=$(STAGE)
 endef
 
@@ -72,7 +71,6 @@ help:
 	@echo ""
 	@echo "☁️  部署管理:"
 	@echo "  make deploy           - 完整部署应用到AWS"
-	@echo "  make deploy-with-layer - 使用Lambda Layer部署（解决大包问题）"
 	@echo "  make deploy-web       - 仅部署Web栈"
 	@echo "  make deploy-api       - 仅部署API栈"
 	@echo "  make update-frontend  - 仅更新前端配置"
@@ -163,19 +161,11 @@ diff:
 		$(SET_CDK_ENV) \
 		cdk diff --app "python3 $(CDK_APP)"
 
-# 构建Lambda ZIP包（根据USE_LAYER环境变量选择模式）
+# 构建Lambda ZIP包
 build-lambda:
-	@if [ "$(USE_LAYER)" = "true" ]; then \
-		echo "📦 构建Lambda包（Layer模式）..."; \
-	else \
-		echo "📦 构建Lambda ZIP包（传统模式）..."; \
-	fi
-	@USE_LAYER=$(USE_LAYER) bash scripts/build_lambda_package.sh
-	@if [ "$(USE_LAYER)" = "true" ]; then \
-		echo "✅ Lambda Layer包构建完成"; \
-	else \
-		echo "✅ Lambda ZIP包构建完成"; \
-	fi
+	@echo "📦 构建Lambda ZIP包..."
+	@bash scripts/build_lambda_package.sh
+	@echo "✅ Lambda ZIP包构建完成"
 
 # CORS Helper在构建时自动从 MVC 位置复制
 sync-cors-helper:
@@ -252,22 +242,11 @@ build-lambda-fixed:
 	@echo "✅ Lambda包构建完成："
 	@ls -lh zilliz-rag-*.zip | awk '{print "  " $$9 ": " $$5}'
 
-# 构建Lambda Layer（显式）
-build-lambda-layer:
-	@echo "📦 构建Lambda Layer包..."
-	@USE_LAYER=true bash scripts/build_lambda_package.sh
-	@echo "✅ Lambda Layer包构建完成"
-
-# 构建传统Lambda ZIP包（显式）
+# 构建Lambda ZIP包
 build-lambda-zip:
-	@echo "📦 构建传统Lambda ZIP包..."
-	@USE_LAYER=false bash scripts/build_lambda_package.sh
+	@echo "📦 构建Lambda ZIP包..."
+	@bash scripts/build_lambda_package.sh
 	@echo "✅ Lambda ZIP包构建完成"
-
-# 使用Lambda Layer部署（解决大包问题）
-deploy-with-layer:
-	@echo "🚀 使用Lambda Layer模式部署..."
-	@export USE_LAYER=true && $(MAKE) deploy
 
 # 直接部署Lambda函数（不通过CDK）
 deploy-lambda-direct: build-lambda-fixed
@@ -382,7 +361,6 @@ logs-lambda:
 deploy: check-env build-lambda
 	@echo "🚀 部署RAG应用（包含所有修复）..."
 	@echo "  使用API V2: $(USE_API_V2)"
-	@echo "  使用Layer模式: $(USE_LAYER)"
 	@echo "  阶段: $(STAGE)"
 	@echo "  区域: $(AWS_REGION)"
 	@echo "  CDK_DEFAULT_REGION: $(CDK_DEFAULT_REGION)"
@@ -393,7 +371,6 @@ deploy: check-env build-lambda
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
 		CDK_DEFAULT_REGION=$(AWS_REGION) \
 		USE_API_V2=$(USE_API_V2) \
-		USE_LAYER=$(USE_LAYER) \
 		BEDROCK_MODEL_ID=$(BEDROCK_MODEL_ID) \
 		EMBEDDING_MODEL_ID=$(EMBEDDING_MODEL_ID) \
 		ZILLIZ_ENDPOINT=$(ZILLIZ_ENDPOINT) \
