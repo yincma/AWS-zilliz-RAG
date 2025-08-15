@@ -5,7 +5,8 @@
 	check-tools check-env bootstrap build-lambda build-lambda-fixed build-lambda-zip \
 	deploy-lambda-direct update-lambda-env list-lambda logs-lambda \
 	deploy-data deploy-api deploy-web _update_frontend_common \
-	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper
+	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper \
+	build-container push-container deploy-container clean-ecr update-lambda
 
 # 设置默认目标
 .DEFAULT_GOAL := help
@@ -35,6 +36,12 @@ OS_TYPE := $(shell uname -s)
 S3_BUCKET_DOCUMENTS ?= rag-documents-$(ACCOUNT_ID)-$(AWS_REGION)
 S3_BUCKET_WEB ?= rag-web-$(ACCOUNT_ID)-$(AWS_REGION)
 
+# ECR容器镜像配置
+ECR_REPOSITORY_NAME ?= rag-lambda-query
+ECR_IMAGE_TAG ?= latest
+ECR_IMAGE_URI := $(ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG)
+LAMBDA_FUNCTION_NAME ?= RAG-API-prod-QueryFunctionBDF4DE5B-fefZmPcq2NrF
+
 # 确保CDK使用正确的区域
 export CDK_DEFAULT_REGION := $(AWS_REGION)
 export AWS_DEFAULT_REGION := $(AWS_REGION)
@@ -61,13 +68,20 @@ help:
 	@echo "  make install          - 安装所有依赖"
 	@echo "  make clean            - 清理构建产物和缓存"
 	@echo ""
-	@echo "⚡ Lambda快速部署 (新增):"
-	@echo "  make redeploy-lambda      - 快速重新部署Lambda（推荐）"
+	@echo "🐳 容器镜像部署 (推荐):"
+	@echo "  make deploy-container     - 构建并部署容器镜像到Lambda（一键部署）"
+	@echo "  make build-container      - 构建Docker容器镜像"
+	@echo "  make push-container       - 推送镜像到ECR"
+	@echo "  make update-lambda        - 快速更新Lambda代码（仅重新构建和部署容器）"
 	@echo "  make test-lambda          - 测试Lambda函数"
+	@echo "  make logs-lambda          - 查看Lambda日志"
+	@echo "  make clean-ecr            - 清理ECR仓库"
+	@echo ""
+	@echo "⚡ Lambda ZIP部署 (已弃用):"
+	@echo "  make redeploy-lambda      - 快速重新部署Lambda（ZIP方式）"
 	@echo "  make deploy-lambda-direct - 直接部署Lambda函数（21MB优化版）"
 	@echo "  make build-lambda-fixed   - 构建修复版Lambda包"
 	@echo "  make update-lambda-env    - 更新Lambda环境变量"
-	@echo "  make logs-lambda          - 查看Lambda日志"
 	@echo ""
 	@echo "☁️  部署管理:"
 	@echo "  make deploy           - 完整部署应用到AWS"
@@ -405,15 +419,113 @@ logs-lambda:
 	@echo "如需实时日志，运行："
 	@echo "  aws logs tail /aws/lambda/rag-query-handler --follow --region $(AWS_REGION)"
 
-# 完整部署（推荐）
-deploy: check-env build-lambda
-	@echo "🚀 部署RAG应用（包含所有修复）..."
+# 构建容器镜像
+build-container:
+	@echo "🐳 构建Docker容器镜像..."
+	@echo "  平台: linux/amd64"
+	@echo "  镜像标签: $(ECR_IMAGE_TAG)"
+	
+	# 检查Docker
+	@if ! which docker >/dev/null 2>&1; then \
+		echo "❌ Docker未安装！请安装Docker:"; \
+		echo "  macOS: brew install --cask docker"; \
+		echo "  Linux: curl -fsSL https://get.docker.com | sh"; \
+		exit 1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "❌ Docker daemon未运行！请启动Docker Desktop"; \
+		exit 1; \
+	fi
+	
+	# 构建镜像
+	@docker buildx build \
+		--platform linux/amd64 \
+		--provenance=false \
+		-t $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) \
+		-f Dockerfile.lambda \
+		.
+	@echo "✅ Docker镜像构建完成"
+
+# 推送容器镜像到ECR
+push-container: build-container
+	@echo "📤 推送Docker镜像到ECR..."
+	
+	# 创建ECR仓库（如果不存在）
+	@aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_NAME) --region $(AWS_REGION) >/dev/null 2>&1 || \
+		aws ecr create-repository \
+			--repository-name $(ECR_REPOSITORY_NAME) \
+			--region $(AWS_REGION) \
+			--image-scanning-configuration scanOnPush=true \
+			--image-tag-mutability MUTABLE
+	
+	# 登录到ECR
+	@aws ecr get-login-password --region $(AWS_REGION) | \
+		docker login --username AWS --password-stdin \
+		$(ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
+	
+	# 标记并推送镜像
+	@docker tag $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) $(ECR_IMAGE_URI)
+	@docker push $(ECR_IMAGE_URI)
+	@echo "✅ 镜像推送成功: $(ECR_IMAGE_URI)"
+
+# 一键部署容器镜像到Lambda（推荐）
+deploy-container: push-container
+	@echo "🚀 部署容器镜像到Lambda..."
+	
+	# 检查Lambda函数是否存在
+	@if aws lambda get-function --function-name $(LAMBDA_FUNCTION_NAME) --region $(AWS_REGION) >/dev/null 2>&1; then \
+		echo "📦 更新Lambda函数镜像..."; \
+		aws lambda update-function-code \
+			--function-name $(LAMBDA_FUNCTION_NAME) \
+			--image-uri $(ECR_IMAGE_URI) \
+			--region $(AWS_REGION) \
+			--output json | jq '{FunctionName, LastUpdateStatus, State}'; \
+		echo "⏳ 等待Lambda更新完成..."; \
+		aws lambda wait function-updated \
+			--function-name $(LAMBDA_FUNCTION_NAME) \
+			--region $(AWS_REGION); \
+		echo "✅ Lambda函数更新完成！"; \
+	else \
+		echo "❌ Lambda函数不存在: $(LAMBDA_FUNCTION_NAME)"; \
+		echo "请先运行 'make deploy' 创建基础架构"; \
+		exit 1; \
+	fi
+	
+	# 测试API
+	@echo "🧪 测试API健康检查..."
+	@curl -s https://9j0pdvhnya.execute-api.us-east-1.amazonaws.com/prod/health | python3 -m json.tool || true
+	@echo ""
+	@echo "✅ 容器镜像部署完成！"
+	@echo "  镜像URI: $(ECR_IMAGE_URI)"
+	@echo "  Lambda函数: $(LAMBDA_FUNCTION_NAME)"
+
+# 清理ECR仓库
+clean-ecr:
+	@echo "🧹 清理ECR仓库..."
+	@read -p "确定要删除ECR仓库 $(ECR_REPOSITORY_NAME) 吗？(y/N) " confirm && \
+	if [ "$$confirm" = "y" ]; then \
+		aws ecr delete-repository \
+			--repository-name $(ECR_REPOSITORY_NAME) \
+			--region $(AWS_REGION) \
+			--force && \
+		echo "✅ ECR仓库已删除"; \
+	else \
+		echo "取消删除"; \
+	fi
+
+# 快速更新Lambda（仅重新构建和部署容器）
+update-lambda: deploy-container
+	@echo "✅ Lambda函数快速更新完成！"
+
+# 完整部署（使用容器镜像）
+deploy: check-env
+	@echo "🚀 部署RAG应用（容器镜像版本）..."
 	@echo "  使用API V2: $(USE_API_V2)"
 	@echo "  阶段: $(STAGE)"
 	@echo "  区域: $(AWS_REGION)"
-	@echo "  CDK_DEFAULT_REGION: $(CDK_DEFAULT_REGION)"
+	@echo "  部署方式: Docker容器镜像"
 	
-	# 部署所有栈（强制使用.env中的区域配置）
+	# 部署CDK栈
 	cd infrastructure && \
 		AWS_REGION=$(AWS_REGION) \
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
@@ -428,6 +540,9 @@ deploy: check-env build-lambda
 		--app "python3 $(CDK_APP)" \
 		--context stage=$(STAGE) \
 		--require-approval never
+	
+	# 构建并部署容器镜像
+	@$(MAKE) deploy-container
 	
 	# 生成前端配置
 	@$(MAKE) generate-config
@@ -575,20 +690,75 @@ test-ui:
 	@echo "🧪 测试UI功能..."
 	python3 tests/test_ui_functionality.py
 
-# 销毁资源
-destroy: build-lambda
-	@echo "💥 销毁所有CDK资源..."
+# 销毁资源 - 增强版本，确保一次性完成
+destroy:
+	@echo "💥 销毁所有AWS资源..."
 	@read -p "确定要销毁所有资源吗？(y/N) " confirm && \
 	if [ "$$confirm" = "y" ]; then \
+		echo ""; \
+		echo "📋 开始清理AWS资源..."; \
+		echo "======================="; \
+		echo ""; \
+		echo "1️⃣ 清理S3存储桶内容..." && \
+		for bucket in $$(aws s3api list-buckets --query "Buckets[?contains(Name, 'rag-')].Name" --output text); do \
+			echo "  清空S3桶: $$bucket" && \
+			aws s3 rm s3://$$bucket --recursive 2>/dev/null || true && \
+			aws s3api delete-bucket --bucket $$bucket --region $(AWS_REGION) 2>/dev/null || true; \
+		done; \
+		echo "  ✅ S3清理完成"; \
+		echo ""; \
+		echo "2️⃣ 清理ECR仓库..." && \
+		aws ecr delete-repository \
+			--repository-name $(ECR_REPOSITORY_NAME) \
+			--region $(AWS_REGION) \
+			--force 2>/dev/null && \
+		echo "  ✅ ECR仓库已删除" || echo "  ⚠️  ECR仓库不存在或已删除"; \
+		echo ""; \
+		echo "3️⃣ 清理CloudFormation栈..." && \
+		echo "  获取所有RAG相关栈..." && \
+		for stack in $$(aws cloudformation list-stacks \
+			--stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
+			--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
+			--output text --region $(AWS_REGION)); do \
+			echo "  发起删除栈: $$stack" && \
+			aws cloudformation delete-stack --stack-name $$stack --region $(AWS_REGION); \
+		done; \
+		echo "  ⏳ 栈删除已发起，等待完成..." && \
+		sleep 5 && \
+		for i in 1 2 3 4 5 6 7 8 9 10 11 12; do \
+			remaining=$$(aws cloudformation list-stacks \
+				--stack-status-filter DELETE_IN_PROGRESS \
+				--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
+				--output text --region $(AWS_REGION) | wc -w); \
+			if [ "$$remaining" -eq 0 ]; then \
+				echo "  ✅ CloudFormation栈清理完成"; \
+				break; \
+			else \
+				echo "  ⏳ 还有 $$remaining 个栈正在删除，等待10秒..." && \
+				sleep 10; \
+			fi; \
+		done; \
+		echo ""; \
+		echo "4️⃣ 使用CDK destroy作为备份清理..." && \
 		cd infrastructure && \
 		$(SET_AWS_ENV) \
-		cdk destroy --all --app "python3 $(CDK_APP)" --force && \
+		cdk destroy --all --app "python3 $(CDK_APP)" --force 2>/dev/null || true && \
 		cd .. && \
-		echo "🧹 清理临时构建目录..." && \
+		echo "  ✅ CDK清理完成"; \
+		echo ""; \
+		echo "5️⃣ 清理本地资源..." && \
+		docker rmi $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) 2>/dev/null || true && \
+		docker rmi $(ECR_IMAGE_URI) 2>/dev/null || true && \
 		rm -rf lambda_build_temp && \
-		echo "✅ 临时目录已清理"; \
+		rm -rf zilliz-rag-*.zip && \
+		rm -rf infrastructure/cdk.out && \
+		echo "  ✅ 本地资源清理完成"; \
+		echo ""; \
+		echo "======================="; \
+		echo "✅ 🎉 所有资源清理完成！"; \
+		echo ""; \
 	else \
-		echo "取消销毁"; \
+		echo "❌ 取消销毁操作"; \
 	fi
 
 # 检查环境变量
@@ -607,6 +777,8 @@ check-env:
 	fi
 	@echo "✅ 环境配置检查完成"
 
-# 一键部署和测试
+# 一键部署和测试（使用容器镜像）
 all: clean install deploy verify-deploy test-api
 	@echo "🎉 完整部署和测试完成！"
+	@echo "  部署方式: Docker容器镜像"
+	@echo "  镜像URI: $(ECR_IMAGE_URI)"

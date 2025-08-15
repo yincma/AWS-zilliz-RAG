@@ -33,8 +33,13 @@ RUN pip install --no-cache-dir -r requirements-lambda.txt
 COPY app/ ${LAMBDA_TASK_ROOT}/app/
 COPY config/ ${LAMBDA_TASK_ROOT}/config/
 
-# 复制Lambda handler（重命名为query_handler.py）
+# 构建参数：指定handler类型（query_handler 或 ingest_handler）
+ARG HANDLER=query_handler
+
+# 复制Lambda handlers
 COPY app/controllers/lambda_handlers/query_handler_v2.py ${LAMBDA_TASK_ROOT}/query_handler.py
+COPY app/controllers/lambda_handlers/ingest_handler.py ${LAMBDA_TASK_ROOT}/ingest_handler.py
+COPY app/controllers/lambda_handlers/cors_helper.py ${LAMBDA_TASK_ROOT}/cors_helper.py
 
 # 创建必要的__init__.py文件
 RUN touch ${LAMBDA_TASK_ROOT}/app/__init__.py && \
@@ -46,6 +51,10 @@ RUN touch ${LAMBDA_TASK_ROOT}/app/__init__.py && \
 
 # 设置Python路径
 ENV PYTHONPATH=${LAMBDA_TASK_ROOT}:${LAMBDA_TASK_ROOT}/app
+
+# 根据构建参数动态设置Lambda handler
+# 使用环境变量来设置handler，默认为query_handler
+ENV HANDLER_MODULE=${HANDLER}
 
 # 设置Lambda handler
 CMD ["query_handler.handler"]
