@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>RAG API测试</h1>
+    
+    <div id="results"></div>
+    
+    <h2>测试按钮</h2>
+    <button onclick="testConfigLoad()">1. 测试Config加载</button>
+    <button onclick="testHealth()">2. 测试健康检查</button>
+    <button onclick="testQuery()">3. 测试查询</button>
+    <button onclick="testCORS()">4. 测试CORS</button>
+    
+    <script>
+        const apiUrl = 'https://9j0pdvhnya.execute-api.us-east-1.amazonaws.com/prod';
+        const cloudfrontUrl = 'https://dgecujne8rnr2.cloudfront.net';
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        async function testConfigLoad() {
+            addResult('正在测试config.json加载...', 'info');
+            try {
+                const response = await fetch(`${cloudfrontUrl}/config.json`);
+                const config = await response.json();
+                addResult(`✅ Config加载成功: <pre>${JSON.stringify(config, null, 2)}</pre>`, 'success');
+            } catch (error) {
+                addResult(`❌ Config加载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testHealth() {
+            addResult('正在测试健康检查...', 'info');
+            try {
+                const response = await fetch(`${apiUrl}/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                addResult(`✅ 健康检查成功: <pre>${JSON.stringify(data, null, 2)}</pre>`, 'success');
+            } catch (error) {
+                addResult(`❌ 健康检查失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testQuery() {
+            addResult('正在测试查询API...', 'info');
+            try {
+                const response = await fetch(`${apiUrl}/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: 'What is RAG?',
+                        top_k: 3,
+                        use_rag: true
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                addResult(`✅ 查询成功: <pre>${JSON.stringify({
+                    query: data.query,
+                    answer: data.answer.substring(0, 200) + '...',
+                    sources: data.sources
+                }, null, 2)}</pre>`, 'success');
+            } catch (error) {
+                addResult(`❌ 查询失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testCORS() {
+            addResult('正在测试CORS配置...', 'info');
+            try {
+                // 使用OPTIONS方法测试CORS预检
+                const response = await fetch(`${apiUrl}/query`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type'
+                    }
+                });
+                
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                };
+                
+                addResult(`✅ CORS配置: <pre>${JSON.stringify(corsHeaders, null, 2)}</pre>`, 'success');
+            } catch (error) {
+                addResult(`❌ CORS测试失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 页面加载时自动运行基础测试
+        window.addEventListener('load', async () => {
+            addResult('页面加载完成，开始自动测试...', 'info');
+            await testConfigLoad();
+            await testHealth();
+        });
+    </script>
+</body>
+</html>

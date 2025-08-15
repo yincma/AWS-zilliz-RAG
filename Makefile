@@ -203,41 +203,89 @@ test-lambda:
 	cat /tmp/response.json | jq '.body' | jq -r . | jq '.sources[0]' | head -10; \
 	rm -f /tmp/payload.txt /tmp/response.json
 
-# 构建Lambda包（修复的21MB版本）
+# 构建Lambda包（修复的Linux兼容版本）
 build-lambda-fixed:
-	@echo "📦 构建修复版Lambda包（21MB优化版）..."
-	@echo "  包含pymilvus修复和轻量级stubs"
+	@echo "📦 构建Linux兼容的Lambda包..."
+	@echo "  强制使用Docker确保Linux兼容性"
+	
+	# 检查Docker
+	@if ! which docker >/dev/null 2>&1; then \
+		echo "❌ Docker未安装！请安装Docker:"; \
+		echo "  macOS: brew install --cask docker"; \
+		echo "  Linux: curl -fsSL https://get.docker.com | sh"; \
+		exit 1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "❌ Docker daemon未运行！请启动Docker Desktop"; \
+		exit 1; \
+	fi
+	
+	# 清理旧的构建目录
 	@if [ -d lambda_build_temp ]; then \
-		echo "清理旧的构建目录..."; \
+		echo "🧹 清理旧的构建目录..."; \
 		rm -rf lambda_build_temp; \
 	fi
 	@mkdir -p lambda_build_temp/query lambda_build_temp/ingest
 	
 	# 复制handler文件
-	@cp app/controllers/lambda_handlers/query_handler.py lambda_build_temp/query/
+	@echo "📋 复制Lambda handler文件..."
+	@cp app/controllers/lambda_handlers/query_handler_v2.py lambda_build_temp/query/query_handler.py
 	@cp app/controllers/lambda_handlers/ingest_handler.py lambda_build_temp/ingest/
+	@cp app/controllers/lambda_handlers/cors_helper.py lambda_build_temp/query/ 2>/dev/null || true
+	@cp app/controllers/lambda_handlers/cors_helper.py lambda_build_temp/ingest/ 2>/dev/null || true
+	
+	# 复制app模块
+	@echo "📋 复制app模块..."
+	@for dir in query ingest; do \
+		mkdir -p lambda_build_temp/$$dir/app/models; \
+		mkdir -p lambda_build_temp/$$dir/app/controllers; \
+		cp -r app/models/*.py lambda_build_temp/$$dir/app/models/ 2>/dev/null || true; \
+		touch lambda_build_temp/$$dir/app/__init__.py; \
+		touch lambda_build_temp/$$dir/app/models/__init__.py; \
+	done
 	
 	# 使用Docker构建依赖（Linux兼容）
 	@echo "🐳 使用Docker构建Linux兼容依赖..."
-	@which docker >/dev/null 2>&1 || { echo "❌ Docker未安装，无法构建Linux兼容包"; exit 1; }
 	@docker run --rm \
 		-v $$(pwd):/workspace \
 		-w /workspace \
 		--platform linux/amd64 \
 		python:3.9-slim \
-		bash -c "pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/query/ && \
-				pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/ingest/"
+		bash -c "pip install --no-cache-dir \
+			'numpy<2.0,>=1.19.0' \
+			'pandas<2.0.0' \
+			'pymilvus>=2.3.0' \
+			'grpcio>=1.48.0' \
+			'protobuf>=3.20.0' \
+			'boto3>=1.34.0' \
+			'python-dotenv>=1.0.0' \
+			'pydantic>=2.6.1' \
+			'pydantic-settings>=2.2.1' \
+			'ujson>=5.0.0' \
+			-t lambda_build_temp/query/ --upgrade && \
+		pip install --no-cache-dir \
+			'numpy<2.0,>=1.19.0' \
+			'pandas<2.0.0' \
+			'pymilvus>=2.3.0' \
+			'grpcio>=1.48.0' \
+			'protobuf>=3.20.0' \
+			'boto3>=1.34.0' \
+			'python-dotenv>=1.0.0' \
+			'pydantic>=2.6.1' \
+			'pydantic-settings>=2.2.1' \
+			'ujson>=5.0.0' \
+			-t lambda_build_temp/ingest/ --upgrade"
 	
-	# 复制numpy和pandas stubs
-	@cp app/controllers/lambda_handlers/numpy_stub.py lambda_build_temp/query/numpy/__init__.py 2>/dev/null || true
-	@cp app/controllers/lambda_handlers/numpy_stub.py lambda_build_temp/ingest/numpy/__init__.py 2>/dev/null || true
-	@mkdir -p lambda_build_temp/query/pandas/api lambda_build_temp/ingest/pandas/api
-	@cp app/controllers/lambda_handlers/pandas_stub.py lambda_build_temp/query/pandas/__init__.py 2>/dev/null || true
-	@cp app/controllers/lambda_handlers/pandas_stub.py lambda_build_temp/ingest/pandas/__init__.py 2>/dev/null || true
+	# 清理不必要的文件
+	@echo "🧹 清理不必要的文件..."
+	@find lambda_build_temp -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find lambda_build_temp -type d -name "*.dist-info" ! -name "pymilvus*" -exec rm -rf {} + 2>/dev/null || true
+	@find lambda_build_temp -type f -name "*.pyc" -delete 2>/dev/null || true
 	
 	# 打包
-	@cd lambda_build_temp/query && zip -r ../../zilliz-rag-query.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q
-	@cd lambda_build_temp/ingest && zip -r ../../zilliz-rag-ingest.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q
+	@echo "📦 创建ZIP包..."
+	@cd lambda_build_temp/query && zip -r ../../zilliz-rag-query.zip . -x "*.pyc" "*__pycache__*" -q
+	@cd lambda_build_temp/ingest && zip -r ../../zilliz-rag-ingest.zip . -x "*.pyc" "*__pycache__*" -q
 	
 	@echo "✅ Lambda包构建完成："
 	@ls -lh zilliz-rag-*.zip | awk '{print "  " $$9 ": " $$5}'

@@ -88,7 +88,9 @@ class ChatManager {
                 
                 // 显示引用源
                 if (this.showSourcesInput.checked && response.sources && response.sources.length > 0) {
-                    this.addSources(answerElement, response.sources, response.confidence);
+                    // 从metadata或顶层获取confidence
+                    const confidence = response.metadata?.confidence || response.confidence;
+                    this.addSources(answerElement, response.sources, confidence);
                 }
             } else {
                 const noAnswerText = window.i18n ? window.i18n.t('chat.noAnswer') : 'No answer found';
@@ -151,7 +153,9 @@ class ChatManager {
         sourcesDiv.className = 'message-sources';
         
         const headerDiv = document.createElement('div');
-        headerDiv.innerHTML = `<strong>引用源 ${confidence ? `(置信度: ${confidence.toFixed(1)}%)` : ''}</strong>`;
+        // confidence是0-1的值，需要乘以100转换为百分比
+        const confidencePercent = confidence !== undefined && confidence !== null ? (confidence * 100).toFixed(1) : null;
+        headerDiv.innerHTML = `<strong>引用源 ${confidencePercent !== null ? `(置信度: ${confidencePercent}%)` : ''}</strong>`;
         sourcesDiv.appendChild(headerDiv);
         
         sources.forEach((source, index) => {
@@ -163,14 +167,16 @@ class ChatManager {
             
             const sourceTitle = document.createElement('span');
             sourceTitle.className = 'source-title';
-            sourceTitle.textContent = source.metadata?.source || `来源 ${index + 1}`;
-            
-            const sourceScore = document.createElement('span');
-            sourceScore.className = 'source-score';
-            sourceScore.textContent = `相似度: ${source.score.toFixed(1)}%`;
-            
+            sourceTitle.textContent = source.metadata?.source || source.metadata?.filename || `来源 ${index + 1}`;
             sourceHeader.appendChild(sourceTitle);
-            sourceHeader.appendChild(sourceScore);
+            
+            // 添加score显示（如果存在）
+            if (source.score !== undefined && source.score !== null) {
+                const sourceScore = document.createElement('span');
+                sourceScore.className = 'source-score';
+                sourceScore.textContent = `相似度: ${source.score.toFixed(1)}%`;
+                sourceHeader.appendChild(sourceScore);
+            }
             
             const sourceContent = document.createElement('div');
             sourceContent.className = 'source-content';

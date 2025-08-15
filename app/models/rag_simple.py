@@ -19,6 +19,7 @@ class Document:
     metadata: Dict[str, Any]
     embedding: Optional[List[float]] = None
     doc_id: Optional[str] = None
+    score: Optional[float] = None  # 相似度分数
 
 @dataclass
 class RAGResponse:
@@ -112,7 +113,7 @@ class SimpleVectorStore:
                 
                 # 创建索引
                 index_params = {
-                    "metric_type": "IP",
+                    "metric_type": "L2",
                     "index_type": "IVF_FLAT",
                     "params": {"nlist": 128}
                 }
@@ -126,8 +127,9 @@ class SimpleVectorStore:
             logger.info(f"Connected to Zilliz collection: {collection_name}")
             return True
             
-        except ImportError:
-            logger.warning("pymilvus not available")
+        except ImportError as e:
+            logger.error(f"pymilvus import failed: {str(e)}")
+            logger.error("Please ensure pymilvus is installed in Lambda package")
             return False
         except Exception as e:
             logger.error(f"Failed to connect to Zilliz: {str(e)}")
@@ -171,28 +173,56 @@ class SimpleVectorStore:
         """搜索相似文档"""
         try:
             if self.use_zilliz:
-                search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
+                logger.info(f"Searching Zilliz with top_k={top_k}")
+                search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
                 
                 results = self.collection.search(
                     data=[query_embedding],
                     anns_field="embedding",
                     param=search_params,
                     limit=top_k,
-                    output_fields=["content", "metadata"]
+                    output_fields=["text", "metadata"]
                 )
                 
                 documents = []
                 for hit in results[0]:
+                    # Handle both dict and object-like entity formats
+                    # Try dict-like access first, then fall back to attribute access
+                    try:
+                        # Try dict-like access if entity is a dict
+                        if isinstance(hit.entity, dict):
+                            text = hit.entity.get("text", "")
+                            metadata = hit.entity.get("metadata", {})
+                        else:
+                            # Use attribute access for object-like entities
+                            text = getattr(hit.entity, "text", "")
+                            metadata = getattr(hit.entity, "metadata", {})
+                    except (AttributeError, TypeError) as e:
+                        logger.error(f"Error accessing entity fields: {str(e)}")
+                        logger.error(f"Entity type: {type(hit.entity)}, Entity: {hit.entity}")
+                        text = ""
+                        metadata = {}
+                    
+                    # Get distance/score (L2 distance - smaller is better)
+                    # Convert L2 distance to similarity score (0-100)
+                    distance = getattr(hit, 'distance', 0)
+                    # Convert distance to similarity percentage (inverse relationship)
+                    # Using a simple formula: score = max(0, 100 - distance * 10)
+                    score = max(0, min(100, 100 - distance * 10))
+                    
                     doc = Document(
-                        content=hit.entity.get("content", ""),
-                        metadata=hit.entity.get("metadata", {}),
-                        doc_id=hit.id
+                        content=text,
+                        metadata=metadata,
+                        doc_id=hit.id,
+                        score=score
                     )
                     documents.append(doc)
                 
+                logger.info(f"Found {len(documents)} documents from Zilliz")
                 return documents
             else:
                 # 内存搜索（简单的相似度计算）
+                logger.info("Using in-memory search")
                 if not self.memory_store:
                     return []
                 
@@ -205,10 +235,19 @@ class SimpleVectorStore:
                 
                 # 排序并返回top_k
                 scores.sort(key=lambda x: x[0], reverse=True)
-                return [doc for _, doc in scores[:top_k]]
+                
+                # 为每个文档设置score并返回
+                result_docs = []
+                for score, doc in scores[:top_k]:
+                    # 将余弦相似度转换为百分比（假设已归一化）
+                    doc.score = min(100, max(0, score * 100))
+                    result_docs.append(doc)
+                return result_docs
                 
         except Exception as e:
             logger.error(f"Error searching documents: {str(e)}")
+            logger.error(f"Stack trace:", exc_info=True)
+            # Return empty list instead of raising to allow graceful degradation
             return []
 
 
@@ -259,24 +298,29 @@ Answer:"""
     def _invoke_nova(self, prompt: str) -> str:
         """调用Nova模型"""
         try:
+            # Nova API参数配置（不包含top_p）
+            nova_params = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"text": prompt}]
+                    }
+                ]
+            }
+            
             response = self.bedrock.invoke_model(
                 modelId=self.model_id,
-                body=json.dumps({
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "max_tokens": 500,
-                    "temperature": 0.7,
-                    "top_p": 0.9
-                }),
+                body=json.dumps(nova_params),
                 contentType='application/json'
             )
             
             result = json.loads(response['body'].read())
-            return result.get('content', [{}])[0].get('text', 'No response generated')
+            # Nova API响应格式: output.message.content[0].text
+            if 'output' in result and 'message' in result['output']:
+                content = result['output']['message'].get('content', [])
+                if content and len(content) > 0 and 'text' in content[0]:
+                    return content[0]['text']
+            return 'No response generated'
             
         except Exception as e:
             logger.error(f"Nova invocation error: {str(e)}")
@@ -303,28 +347,45 @@ Answer:"""
             )
             
             result = json.loads(response['body'].read())
-            return result.get('content', [{}])[0].get('text', 'No response generated')
+            # Nova API响应格式: output.message.content[0].text
+            if 'output' in result and 'message' in result['output']:
+                content = result['output']['message'].get('content', [])
+                if content and len(content) > 0 and 'text' in content[0]:
+                    return content[0]['text']
+            return 'No response generated'
             
         except Exception as e:
             logger.error(f"Claude invocation error: {str(e)}")
             return f"Error with Claude: {str(e)}"
     
     def _invoke_default(self, prompt: str) -> str:
-        """默认调用方法"""
+        """默认调用方法 - 使用messages格式"""
         try:
+            # 使用现代messages格式作为默认
+            default_params = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"text": prompt}]
+                    }
+                ]
+            }
+            
             response = self.bedrock.invoke_model(
                 modelId=self.model_id,
-                body=json.dumps({
-                    "prompt": prompt,
-                    "max_tokens": 500,
-                    "temperature": 0.7
-                }),
+                body=json.dumps(default_params),
                 contentType='application/json'
             )
             
             result = json.loads(response['body'].read())
             # 尝试不同的响应格式
-            if 'completion' in result:
+            # Nova格式: output.message.content[0].text
+            if 'output' in result and 'message' in result['output']:
+                content = result['output']['message'].get('content', [])
+                if content and len(content) > 0 and 'text' in content[0]:
+                    return content[0]['text']
+            # 其他格式
+            elif 'completion' in result:
                 return result['completion']
             elif 'completions' in result:
                 return result['completions'][0]['data']['text']
@@ -392,11 +453,12 @@ class SimpleRAG:
             # 生成回答
             answer = self.llm.generate(query, context)
             
-            # 构建响应
+            # 构建响应（包含score字段）
             sources = [
                 {
                     "content": doc.content[:200] + "..." if len(doc.content) > 200 else doc.content,
-                    "metadata": doc.metadata
+                    "metadata": doc.metadata,
+                    "score": doc.score if doc.score is not None else 0.0
                 }
                 for doc in relevant_docs
             ]
