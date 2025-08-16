@@ -1,6 +1,6 @@
 """
-API栈 V2 - 使用传统ZIP包的Lambda函数和API Gateway实现
-使用ZIP包部署，避免Docker相关的技术债务
+API栈 V2 - 使用容器镜像的Lambda函数和API Gateway实现
+默认使用容器镜像部署，支持更大的依赖包
 """
 
 from aws_cdk import (
@@ -13,6 +13,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_logs as logs,
     aws_s3 as s3,
+    aws_ecr as ecr,
 )
 from constructs import Construct
 import os
@@ -81,45 +82,106 @@ class ApiStackV2(Stack):
             "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
         }
         
-        # 动态获取Lambda包路径（从项目根目录开始）
-        lambda_package_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "lambda_build_temp"
-        )
+        # 获取项目根目录
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         
-        print(f"📋 使用传统ZIP包模式部署")
+        # 动态获取Lambda包路径（从项目根目录开始）- 即使在容器模式下也定义，避免后续引用错误
+        lambda_package_dir = os.path.join(project_root, "lambda_build_temp")
         
-        # 查询Lambda函数 - 使用ZIP包部署（传统方式）
-        query_package = os.path.join(lambda_package_dir, "query_lambda.zip")
-        query_function = lambda_.Function(
-            self,
-            "QueryFunction",
-            runtime=lambda_.Runtime.PYTHON_3_9,
-            code=lambda_.Code.from_asset(query_package),
-            handler="query_handler.handler",
-            role=lambda_role,
-            environment=environment,
-            timeout=Duration.seconds(30),
-            memory_size=1024,
-            log_retention=logs.RetentionDays.ONE_WEEK,
-            description="RAG查询处理函数"
-        )
+        # 部署模式选择（通过环境变量控制）
+        use_container = os.environ.get("USE_CONTAINER", "true").lower() == "true"
         
-        # 文档摄入Lambda函数 - 使用ZIP包部署（传统方式）
-        ingest_package = os.path.join(lambda_package_dir, "ingest_lambda.zip")
-        ingest_function = lambda_.Function(
-            self,
-            "IngestFunction",
-            runtime=lambda_.Runtime.PYTHON_3_9,
-            code=lambda_.Code.from_asset(ingest_package),
-            handler="ingest_handler.handler",
-            role=lambda_role,
-            environment=environment,
-            timeout=Duration.minutes(5),
-            memory_size=2048,
-            log_retention=logs.RetentionDays.ONE_WEEK,
-            description="文档摄入处理函数"
-        )
+        if use_container:
+            print(f"📋 使用容器镜像模式部署")
+            
+            # 获取账号ID和ECR镜像URI
+            account_id = os.environ.get("ACCOUNT_ID", "375004070918")
+            region = os.environ.get("AWS_REGION", "us-east-1")
+            ecr_repo = os.environ.get("ECR_REPOSITORY_NAME", "rag-lambda-query")
+            ecr_tag = os.environ.get("ECR_IMAGE_TAG", "latest")
+            ecr_image_uri = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{ecr_repo}:{ecr_tag}"
+            
+            print(f"  使用ECR镜像: {ecr_image_uri}")
+            
+            # 查询Lambda函数 - 使用ECR镜像部署
+            query_function = lambda_.Function(
+                self,
+                "QueryFunction",
+                code=lambda_.Code.from_ecr_image(
+                    repository=ecr.Repository.from_repository_arn(
+                        self,
+                        "ECRRepoQuery",
+                        repository_arn=f"arn:aws:ecr:{region}:{account_id}:repository/{ecr_repo}"
+                    ),
+                    tag=ecr_tag,
+                    cmd=["query_handler.handler"]
+                ),
+                handler=lambda_.Handler.FROM_IMAGE,
+                runtime=lambda_.Runtime.FROM_IMAGE,
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.seconds(30),
+                memory_size=1024,
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="RAG查询处理函数（容器版）"
+            )
+            
+            # 文档摄入Lambda函数 - 使用同一个ECR镜像
+            ingest_function = lambda_.Function(
+                self,
+                "IngestFunction",
+                code=lambda_.Code.from_ecr_image(
+                    repository=ecr.Repository.from_repository_arn(
+                        self,
+                        "ECRRepoIngest",
+                        repository_arn=f"arn:aws:ecr:{region}:{account_id}:repository/{ecr_repo}"
+                    ),
+                    tag=ecr_tag,
+                    cmd=["ingest_handler.handler"]
+                ),
+                handler=lambda_.Handler.FROM_IMAGE,
+                runtime=lambda_.Runtime.FROM_IMAGE,
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.minutes(5),
+                memory_size=2048,
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="文档摄入处理函数（容器版）"
+            )
+        else:
+            print(f"📋 使用传统ZIP包模式部署")
+            
+            # 查询Lambda函数 - 使用ZIP包部署（传统方式）
+            query_package = os.path.join(lambda_package_dir, "query_lambda.zip")
+            query_function = lambda_.Function(
+                self,
+                "QueryFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(query_package),
+                handler="query_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.seconds(30),
+                memory_size=1024,
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="RAG查询处理函数"
+            )
+            
+            # 文档摄入Lambda函数 - 使用ZIP包部署（传统方式）
+            ingest_package = os.path.join(lambda_package_dir, "ingest_lambda.zip")
+            ingest_function = lambda_.Function(
+                self,
+                "IngestFunction",
+                runtime=lambda_.Runtime.PYTHON_3_9,
+                code=lambda_.Code.from_asset(ingest_package),
+                handler="ingest_handler.handler",
+                role=lambda_role,
+                environment=environment,
+                timeout=Duration.minutes(5),
+                memory_size=2048,
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                description="文档摄入处理函数"
+            )
         
         # 健康检查Lambda函数
         health_function = lambda_.Function(
@@ -473,7 +535,23 @@ def handler(event, context):
         
         CfnOutput(
             self,
+            "QueryFunctionName",
+            value=query_function.function_name,
+            description="Query Lambda Function Name",
+            export_name=f"{self.stack_name}-QueryFunctionName"
+        )
+        
+        CfnOutput(
+            self,
             "IngestFunctionArn",
             value=ingest_function.function_arn,
             description="Ingest Lambda Function ARN"
+        )
+        
+        CfnOutput(
+            self,
+            "IngestFunctionName",
+            value=ingest_function.function_name,
+            description="Ingest Lambda Function Name",
+            export_name=f"{self.stack_name}-IngestFunctionName"
         )

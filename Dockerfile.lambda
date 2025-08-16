@@ -1,0 +1,60 @@
+# AWS Lambda Python 3.9 runtime - 确保兼容性
+FROM --platform=linux/amd64 public.ecr.aws/lambda/python:3.9
+
+# 安装系统依赖
+RUN yum install -y \
+    gcc \
+    gcc-c++ \
+    python3-devel \
+    && yum clean all \
+    && rm -rf /var/cache/yum
+
+# 设置工作目录
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# 创建requirements文件
+COPY requirements-lambda.txt .
+
+# 安装Python依赖
+# 分层安装以优化缓存
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        marshmallow==3.20.2 \
+        environs==9.5.0 \
+        grpcio==1.53.0 \
+        pymilvus==2.3.0 \
+        protobuf==3.20.3 \
+        numpy==1.24.4
+
+# 安装其余依赖（排除已安装的包）
+RUN pip install --no-cache-dir -r requirements-lambda.txt
+
+# 复制应用代码
+COPY app/ ${LAMBDA_TASK_ROOT}/app/
+COPY config/ ${LAMBDA_TASK_ROOT}/config/
+
+# 构建参数：指定handler类型（query_handler 或 ingest_handler）
+ARG HANDLER=query_handler
+
+# 复制Lambda handlers
+COPY app/controllers/lambda_handlers/query_handler_v2.py ${LAMBDA_TASK_ROOT}/query_handler.py
+COPY app/controllers/lambda_handlers/ingest_handler.py ${LAMBDA_TASK_ROOT}/ingest_handler.py
+COPY app/controllers/lambda_handlers/cors_helper.py ${LAMBDA_TASK_ROOT}/cors_helper.py
+
+# 创建必要的__init__.py文件
+RUN touch ${LAMBDA_TASK_ROOT}/app/__init__.py && \
+    touch ${LAMBDA_TASK_ROOT}/app/models/__init__.py && \
+    touch ${LAMBDA_TASK_ROOT}/app/controllers/__init__.py && \
+    touch ${LAMBDA_TASK_ROOT}/app/views/__init__.py && \
+    touch ${LAMBDA_TASK_ROOT}/app/views/api/__init__.py && \
+    touch ${LAMBDA_TASK_ROOT}/config/__init__.py
+
+# 设置Python路径
+ENV PYTHONPATH=${LAMBDA_TASK_ROOT}:${LAMBDA_TASK_ROOT}/app
+
+# 根据构建参数动态设置Lambda handler
+# 使用环境变量来设置handler，默认为query_handler
+ENV HANDLER_MODULE=${HANDLER}
+
+# 设置Lambda handler
+CMD ["query_handler.handler"]

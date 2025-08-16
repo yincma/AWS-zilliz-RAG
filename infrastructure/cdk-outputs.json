@@ -1,6 +1,0 @@
-{
-  "RAG-Data-prod": {
-    "ExportsOutputRefDocumentBucketAE41E5A9880EA18D": "rag-documents-375004070918-us-east-1",
-    "ExportsOutputFnGetAttDocumentBucketAE41E5A9ArnF6A03022": "arn:aws:s3:::rag-documents-375004070918-us-east-1"
-  }
-}

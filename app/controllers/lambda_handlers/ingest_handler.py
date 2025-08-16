@@ -1,8 +1,9 @@
 """
-Enhanced Lambda function for document ingestion with S3 storage, embedding generation, and Zilliz integration
+Enhanced Lambda function for document ingestion - Simplified version using SimpleRAG
 """
 import json
 import os
+import sys
 import boto3
 import logging
 from typing import Dict, Any, List, Optional
@@ -11,167 +12,39 @@ from datetime import datetime
 import base64
 from cors_helper import create_response, create_error_response, handle_options_request
 
+# 添加app目录到Python路径
+sys.path.insert(0, '/var/task')
+
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
 s3_client = boto3.client('s3')
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
-dynamodb = boto3.resource('dynamodb')
 
-# Try to import pymilvus for Zilliz support
-try:
-    from pymilvus import (
-        connections,
-        Collection,
-        CollectionSchema,
-        FieldSchema,
-        DataType,
-        utility
-    )
-    ZILLIZ_AVAILABLE = True
-    logger.info("✅ pymilvus imported successfully")
-except ImportError as e:
-    logger.error(f"❌ pymilvus import failed: {str(e)}")
-    ZILLIZ_AVAILABLE = False
-except Exception as e:
-    logger.error(f"❌ Unexpected error importing pymilvus: {str(e)}")
-    ZILLIZ_AVAILABLE = False
+# 全局变量用于缓存RAG实例
+rag_instance = None
+
+def get_rag_instance():
+    """获取或创建RAG实例（单例模式）"""
+    global rag_instance
+    if rag_instance is None:
+        try:
+            from app.models.rag_simple import SimpleRAG
+            rag_instance = SimpleRAG()
+            logger.info("SimpleRAG instance created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create SimpleRAG instance: {str(e)}")
+            rag_instance = None
+    return rag_instance
 
 class DocumentProcessor:
-    """Process and store documents for RAG with Zilliz integration"""
+    """Process and store documents using SimpleRAG"""
     
     def __init__(self):
         self.s3_bucket = os.environ.get('S3_BUCKET', 'rag-documents-375004070918-us-east-1')
-        self.embedding_model_id = os.environ.get('EMBEDDING_MODEL_ID', 'amazon.titan-embed-text-v2:0')
-        
-        # Zilliz configuration from environment variables
-        self.zilliz_endpoint = os.environ.get('ZILLIZ_ENDPOINT')
-        self.zilliz_token = os.environ.get('ZILLIZ_TOKEN')
-        self.collection_name = os.environ.get('ZILLIZ_COLLECTION', 'rag_collection')
-        self.zilliz_connected = False
-        self.collection = None
-        
-        logger.info(f"📋 Zilliz configuration check:")
-        logger.info(f"  - ZILLIZ_AVAILABLE: {ZILLIZ_AVAILABLE}")
-        logger.info(f"  - Endpoint configured: {bool(self.zilliz_endpoint)}")
-        logger.info(f"  - Token configured: {bool(self.zilliz_token)}")
-        logger.info(f"  - Collection name: {self.collection_name}")
-        
-        # Try to connect to Zilliz if available
-        if ZILLIZ_AVAILABLE and self.zilliz_endpoint and self.zilliz_token:
-            logger.info("🔄 Attempting to connect to Zilliz...")
-            self.connect_zilliz()
-        else:
-            logger.warning(f"⚠️ Skipping Zilliz connection: ZILLIZ_AVAILABLE={ZILLIZ_AVAILABLE}, endpoint={bool(self.zilliz_endpoint)}, token={bool(self.zilliz_token)}")
-        
-        # Try to get DynamoDB table for metadata
-        try:
-            table_name = os.environ.get('DOCUMENT_TABLE', 'rag-document-metadata')
-            self.metadata_table = dynamodb.Table(table_name)
-        except Exception as e:
-            logger.warning(f"DynamoDB table not available: {str(e)}")
-            self.metadata_table = None
-    
-    def connect_zilliz(self):
-        """Connect to Zilliz Cloud and initialize collection"""
-        try:
-            logger.info(f"Connecting to Zilliz at {self.zilliz_endpoint}")
-            connections.connect(
-                alias="default",
-                uri=self.zilliz_endpoint,
-                token=self.zilliz_token,
-                timeout=10
-            )
-            
-            # Check if collection exists, if not create it
-            if utility.has_collection(self.collection_name):
-                self.collection = Collection(self.collection_name)
-                logger.info(f"Using existing collection: {self.collection_name}")
-            else:
-                self.create_collection()
-                logger.info(f"Created new collection: {self.collection_name}")
-            
-            # Load collection to memory
-            self.collection.load()
-            self.zilliz_connected = True
-            logger.info(f"Successfully connected to Zilliz collection: {self.collection_name}")
-            
-        except Exception as e:
-            logger.error(f"Failed to connect to Zilliz: {str(e)}")
-            self.zilliz_connected = False
-    
-    def create_collection(self):
-        """Create Zilliz collection with proper schema"""
-        # Define fields to match existing collection schema
-        fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),  # Note: singular "embedding"
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),     # Note: "text" not "content"
-            FieldSchema(name="metadata", dtype=DataType.JSON)                        # Note: JSON type not VARCHAR
-        ]
-        
-        # Create schema
-        schema = CollectionSchema(
-            fields=fields,
-            description="RAG document embeddings collection"
-        )
-        
-        # Create collection
-        self.collection = Collection(
-            name=self.collection_name,
-            schema=schema
-        )
-        
-        # Create index for vector field
-        index_params = {
-            "metric_type": "L2",  # Use L2 distance
-            "index_type": "IVF_FLAT",
-            "params": {"nlist": 128}
-        }
-        
-        self.collection.create_index(
-            field_name="embedding",  # Match the field name
-            index_params=index_params
-        )
-        logger.info(f"Created index for collection {self.collection_name}")
-    
-    def store_embeddings_in_zilliz(self, chunks: List[Dict]) -> bool:
-        """Store document chunks and embeddings in Zilliz"""
-        if not self.zilliz_connected or not chunks:
-            logger.warning("Zilliz not connected or no chunks to store")
-            return False
-        
-        try:
-            # Prepare data for batch insert (matching existing schema)
-            embeddings_list = []
-            texts_list = []
-            metadatas_list = []
-            
-            for chunk in chunks:
-                embeddings_list.append(chunk['embedding'])
-                texts_list.append(chunk['content'][:65535])  # Use 'text' field name
-                metadatas_list.append(chunk['metadata'])  # Keep as dict for JSON field
-            
-            # Insert data into collection (order must match schema)
-            insert_data = [
-                embeddings_list,  # embedding field (singular)
-                texts_list,       # text field (not content)
-                metadatas_list    # metadata field (JSON type accepts dict directly)
-            ]
-            
-            result = self.collection.insert(insert_data)
-            
-            # Flush to ensure data is persisted
-            self.collection.flush()
-            
-            logger.info(f"Successfully inserted {len(chunks)} chunks into Zilliz")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to store embeddings in Zilliz: {str(e)}")
-            return False
+        self.rag = get_rag_instance()
+        logger.info("DocumentProcessor initialized with SimpleRAG")
     
     def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
         """Split text into overlapping chunks"""
@@ -199,25 +72,6 @@ class DocumentProcessor:
         
         return chunks
     
-    def generate_embeddings(self, text: str) -> List[float]:
-        """Generate embeddings using Amazon Titan"""
-        try:
-            # Titan has a limit on input text
-            truncated_text = text[:2048] if len(text) > 2048 else text
-            
-            response = bedrock_runtime.invoke_model(
-                modelId=self.embedding_model_id,
-                body=json.dumps({
-                    "inputText": truncated_text
-                })
-            )
-            
-            response_body = json.loads(response['body'].read())
-            return response_body.get('embedding', [])
-            
-        except Exception as e:
-            logger.error(f"Error generating embeddings: {str(e)}")
-            return []
     
     def save_to_s3(self, content: str, filename: str, metadata: Dict = None) -> str:
         """Save document to S3"""
@@ -243,29 +97,9 @@ class DocumentProcessor:
             logger.error(f"Error saving to S3: {str(e)}")
             raise
     
-    def save_metadata(self, document_id: str, filename: str, s3_key: str, chunks: int, embeddings_generated: bool):
-        """Save document metadata to DynamoDB"""
-        if not self.metadata_table:
-            return
-        
-        try:
-            self.metadata_table.put_item(
-                Item={
-                    'document_id': document_id,
-                    'filename': filename,
-                    's3_key': s3_key,
-                    'chunks': chunks,
-                    'embeddings_generated': embeddings_generated,
-                    'uploaded_at': datetime.utcnow().isoformat(),
-                    'status': 'processed'
-                }
-            )
-            logger.info(f"Saved metadata for document {document_id}")
-        except Exception as e:
-            logger.warning(f"Could not save metadata: {str(e)}")
     
     def process_document(self, content: str, filename: str) -> Dict[str, Any]:
-        """Process a document: save to S3, chunk, and generate embeddings"""
+        """Process a document using SimpleRAG"""
         
         # Generate document ID
         document_id = f"doc_{hashlib.md5(content.encode()).hexdigest()[:16]}"
@@ -276,65 +110,41 @@ class DocumentProcessor:
             'original_filename': filename
         })
         
-        # Chunk the document
+        # Use SimpleRAG to add document (it handles chunking and embedding internally)
+        if self.rag:
+            try:
+                metadata = {
+                    'document_id': document_id,
+                    'filename': filename,
+                    's3_key': s3_key,
+                    'uploaded_at': datetime.utcnow().isoformat()
+                }
+                
+                success = self.rag.add_document(content, metadata)
+                
+                if success:
+                    logger.info(f"Successfully added document {document_id} to RAG system")
+                    status = 'success'
+                else:
+                    logger.warning(f"Failed to add document {document_id} to RAG system")
+                    status = 'partial'
+                    
+            except Exception as e:
+                logger.error(f"Error adding document to RAG: {str(e)}")
+                status = 'error'
+        else:
+            logger.warning("RAG instance not available")
+            status = 'no_rag'
+        
+        # Chunk for info purposes
         chunks = self.chunk_text(content)
-        logger.info(f"Created {len(chunks)} chunks from document")
-        
-        # Generate embeddings for each chunk
-        chunk_embeddings = []
-        for i, chunk in enumerate(chunks):
-            embedding = self.generate_embeddings(chunk)
-            if embedding:
-                chunk_embeddings.append({
-                    'chunk_id': f"{document_id}_chunk_{i}",
-                    'content': chunk,
-                    'embedding': embedding,
-                    'metadata': {
-                        'document_id': document_id,
-                        'filename': filename,
-                        's3_key': s3_key,
-                        'chunk_index': i,
-                        'total_chunks': len(chunks)
-                    }
-                })
-        
-        # Store embeddings in Zilliz if connected
-        zilliz_stored = False
-        if chunk_embeddings and self.zilliz_connected:
-            zilliz_stored = self.store_embeddings_in_zilliz(chunk_embeddings)
-            if zilliz_stored:
-                logger.info(f"Successfully stored {len(chunk_embeddings)} embeddings in Zilliz")
-            else:
-                logger.warning("Failed to store embeddings in Zilliz, falling back to S3 only")
-        
-        # Always save chunks and embeddings to S3 as backup
-        if chunk_embeddings:
-            embeddings_key = s3_key.replace('documents/', 'embeddings/') + '.json'
-            s3_client.put_object(
-                Bucket=self.s3_bucket,
-                Key=embeddings_key,
-                Body=json.dumps(chunk_embeddings),
-                ContentType='application/json'
-            )
-            logger.info(f"Saved {len(chunk_embeddings)} embeddings to S3 at {embeddings_key}")
-        
-        # Save metadata
-        self.save_metadata(
-            document_id=document_id,
-            filename=filename,
-            s3_key=s3_key,
-            chunks=len(chunks),
-            embeddings_generated=len(chunk_embeddings) > 0
-        )
         
         return {
             'document_id': document_id,
             'filename': filename,
             's3_key': s3_key,
             'chunks': len(chunks),
-            'embeddings': len(chunk_embeddings),
-            'zilliz_stored': zilliz_stored,
-            'status': 'success'
+            'status': status
         }
 
 # Global processor instance
@@ -408,9 +218,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "message": f"Document '{filename}' ingested successfully",
             "document_id": result['document_id'],
             "chunks": result['chunks'],
-            "embeddings": result['embeddings'],
             "s3_key": result['s3_key'],
-            "zilliz_stored": result.get('zilliz_stored', False)
+            "rag_status": result.get('status', 'unknown')
         }
         
         logger.info(f"Document ingestion completed: {result['document_id']}")

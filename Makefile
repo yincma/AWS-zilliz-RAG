@@ -2,10 +2,12 @@
 # 自动化部署，包含所有修复
 
 .PHONY: help install clean deploy destroy test lint synth diff generate-config update-frontend \
-	check-tools check-env bootstrap build-lambda build-lambda-fixed build-lambda-zip \
+	check-tools check-env bootstrap clean-bootstrap build-lambda build-lambda-fixed build-lambda-zip \
 	deploy-lambda-direct update-lambda-env list-lambda logs-lambda \
 	deploy-data deploy-api deploy-web _update_frontend_common \
-	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper
+	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper \
+	build-container push-container deploy-container clean-ecr update-lambda deploy-quick check-ecr-image \
+	clean-logs destroy-force clean-all
 
 # 设置默认目标
 .DEFAULT_GOAL := help
@@ -35,9 +37,17 @@ OS_TYPE := $(shell uname -s)
 S3_BUCKET_DOCUMENTS ?= rag-documents-$(ACCOUNT_ID)-$(AWS_REGION)
 S3_BUCKET_WEB ?= rag-web-$(ACCOUNT_ID)-$(AWS_REGION)
 
+# ECR容器镜像配置
+ECR_REPOSITORY_NAME ?= rag-lambda-query
+ECR_IMAGE_TAG ?= latest
+ECR_IMAGE_URI := $(ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG)
+# Lambda函数名将从CloudFormation栈输出动态获取，不再硬编码
+
 # 确保CDK使用正确的区域
 export CDK_DEFAULT_REGION := $(AWS_REGION)
 export AWS_DEFAULT_REGION := $(AWS_REGION)
+# 禁用AWS CLI的分页器，避免交互提示
+export AWS_PAGER :=
 
 # 通用AWS环境变量设置
 define SET_AWS_ENV
@@ -53,6 +63,17 @@ define SET_CDK_ENV
 	STAGE=$(STAGE)
 endef
 
+# 动态获取Lambda函数名（从CloudFormation栈输出）
+define GET_LAMBDA_FUNCTION_NAME
+	$(shell aws cloudformation describe-stacks \
+		--stack-name RAG-API-$(STAGE) \
+		--query 'Stacks[0].Outputs[?OutputKey==`QueryFunctionName`].OutputValue' \
+		--output text --region $(AWS_REGION) 2>/dev/null || \
+		aws lambda list-functions --region $(AWS_REGION) \
+		--query 'Functions[?contains(FunctionName, `RAG-API-$(STAGE)-QueryFunction`)].[FunctionName]' \
+		--output text 2>/dev/null | head -1)
+endef
+
 # 帮助信息
 help:
 	@echo "AWS RAG Application - 可用命令:"
@@ -61,32 +82,51 @@ help:
 	@echo "  make install          - 安装所有依赖"
 	@echo "  make clean            - 清理构建产物和缓存"
 	@echo ""
-	@echo "⚡ Lambda快速部署 (新增):"
-	@echo "  make redeploy-lambda      - 快速重新部署Lambda（推荐）"
+	@echo "🐳 容器镜像部署 (推荐):"
+	@echo "  make deploy-container     - 构建并部署容器镜像到Lambda（一键部署）"
+	@echo "  make build-container      - 构建Docker容器镜像"
+	@echo "  make push-container       - 推送镜像到ECR"
+	@echo "  make update-lambda        - 快速更新Lambda代码（仅重新构建和部署容器）"
 	@echo "  make test-lambda          - 测试Lambda函数"
+	@echo "  make logs-lambda          - 查看Lambda日志"
+	@echo "  make clean-ecr            - 清理ECR仓库"
+	@echo ""
+	@echo "⚡ Lambda ZIP部署 (已弃用):"
+	@echo "  make redeploy-lambda      - 快速重新部署Lambda（ZIP方式）"
 	@echo "  make deploy-lambda-direct - 直接部署Lambda函数（21MB优化版）"
 	@echo "  make build-lambda-fixed   - 构建修复版Lambda包"
 	@echo "  make update-lambda-env    - 更新Lambda环境变量"
-	@echo "  make logs-lambda          - 查看Lambda日志"
 	@echo ""
 	@echo "☁️  部署管理:"
-	@echo "  make deploy           - 完整部署应用到AWS"
+	@echo "  make deploy           - 完整部署应用到AWS（自动构建镜像）"
+	@echo "  make deploy-quick     - 快速部署（跳过镜像构建如果已存在）"
 	@echo "  make deploy-web       - 仅部署Web栈"
 	@echo "  make deploy-api       - 仅部署API栈"
 	@echo "  make update-frontend  - 仅更新前端配置"
 	@echo "  make generate-config  - 生成前端API配置"
-	@echo "  make destroy          - 销毁所有资源"
+	@echo "  make destroy          - 销毁所有资源（智能清理）"
+	@echo "  make destroy-force    - 强制销毁所有资源（跳过确认）"
+	@echo "  make clean-logs       - 清理CloudWatch日志组"
+	@echo "  make clean-all        - 清理所有AWS和本地资源"
 	@echo ""
 	@echo "🔍 CDK操作:"
 	@echo "  make synth            - 合成CloudFormation模板"
 	@echo "  make diff             - 查看部署差异"
 	@echo "  make bootstrap        - 初始化CDK环境"
+	@echo "  make clean-bootstrap  - 清理CDK Bootstrap资源"
 	@echo ""
 	@echo "🧪 测试命令:"
 	@echo "  make test             - 运行所有测试"
 	@echo "  make test-api         - 测试API端点"
 	@echo "  make test-ui          - 测试UI功能"
 	@echo "  make test-lambda      - 测试Lambda函数（新增）"
+	@echo ""
+	@echo "🗑️  销毁命令:"
+	@echo "  make destroy          - 智能销毁资源（零技术债务）"
+	@echo "  make destroy-force    - 强制销毁（跳过确认）"
+	@echo "  make check-stacks     - 检查栈状态"
+	@echo "  make fix-failed-stacks - 修复失败的栈"
+	@echo "  make help-destroy     - 查看销毁命令最佳实践"
 	@echo ""
 	@echo "🔧 修复命令:"
 	@echo "  make fix-cors         - 修复CORS问题"
@@ -130,13 +170,37 @@ bootstrap:
 	$(eval ACCOUNT_ID := $(shell aws sts get-caller-identity --query Account --output text))
 	@echo "  账号: $(ACCOUNT_ID)"
 	@echo ""
-	@cd infrastructure && \
-		CDK_DEFAULT_REGION=$(AWS_REGION) \
-		CDK_DEFAULT_ACCOUNT=$(ACCOUNT_ID) \
-		AWS_DEFAULT_REGION=$(AWS_REGION) \
-		npx cdk bootstrap aws://$(ACCOUNT_ID)/$(AWS_REGION) \
-		--app "echo '{}'" \
-		--cloudformation-execution-policies 'arn:aws:iam::aws:policy/AdministratorAccess'
+	@echo "检查现有的Bootstrap资源..."
+	@if aws cloudformation describe-stacks --stack-name CDKToolkit --region $(AWS_REGION) >/dev/null 2>&1; then \
+		echo "✅ CDKToolkit栈已存在"; \
+		STACK_STATUS=$$(aws cloudformation describe-stacks --stack-name CDKToolkit --region $(AWS_REGION) --query 'Stacks[0].StackStatus' --output text); \
+		echo "  栈状态: $$STACK_STATUS"; \
+		if [ "$$STACK_STATUS" = "CREATE_COMPLETE" ] || [ "$$STACK_STATUS" = "UPDATE_COMPLETE" ]; then \
+			echo "✅ Bootstrap已完成，无需重新执行"; \
+		else \
+			echo "⚠️  栈状态异常，可能需要手动修复"; \
+		fi; \
+	else \
+		echo "CDKToolkit栈不存在，检查Bootstrap资源..."; \
+		if aws s3 ls s3://cdk-$(CDK_BOOTSTRAP_QUALIFIER)-assets-$(ACCOUNT_ID)-$(AWS_REGION) >/dev/null 2>&1; then \
+			echo "⚠️  发现S3桶但栈不存在，Bootstrap状态不一致"; \
+			echo "  建议运行 'make clean-bootstrap' 清理后重试"; \
+		else \
+			echo "执行全新Bootstrap..."; \
+			echo '#!/usr/bin/env python3' > /tmp/empty-cdk-app.py; \
+			echo 'import aws_cdk as cdk' >> /tmp/empty-cdk-app.py; \
+			echo 'app = cdk.App()' >> /tmp/empty-cdk-app.py; \
+			echo 'app.synth()' >> /tmp/empty-cdk-app.py; \
+			cd infrastructure && \
+			CDK_DEFAULT_REGION=$(AWS_REGION) \
+			CDK_DEFAULT_ACCOUNT=$(ACCOUNT_ID) \
+			AWS_DEFAULT_REGION=$(AWS_REGION) \
+			npx cdk bootstrap aws://$(ACCOUNT_ID)/$(AWS_REGION) \
+				--app "python3 /tmp/empty-cdk-app.py" \
+				--cloudformation-execution-policies 'arn:aws:iam::aws:policy/AdministratorAccess' 2>/dev/null || \
+			echo "⚠️  Bootstrap可能已存在或部分完成"; \
+		fi; \
+	fi
 	@echo ""
 	@echo "✅ CDK Bootstrap 完成！"
 	@echo ""
@@ -146,6 +210,26 @@ bootstrap:
 	@echo "  - SSM 参数：/cdk-bootstrap/$(CDK_BOOTSTRAP_QUALIFIER)/version"
 	@echo ""
 	@echo "现在可以运行 'make deploy' 部署应用"
+
+# 清理CDK Bootstrap资源
+clean-bootstrap:
+	@echo "🧹 清理CDK Bootstrap资源..."
+	$(eval ACCOUNT_ID := $(shell aws sts get-caller-identity --query Account --output text))
+	@echo "  将清理账号 $(ACCOUNT_ID) 在区域 $(AWS_REGION) 的Bootstrap资源"
+	@read -p "⚠️  确定要清理所有CDK Bootstrap资源吗？这将影响所有CDK应用！(y/N) " confirm && \
+	if [ "$$confirm" = "y" ]; then \
+		echo "删除CDKToolkit栈..."; \
+		aws cloudformation delete-stack --stack-name CDKToolkit --region $(AWS_REGION) 2>/dev/null || true; \
+		echo "等待栈删除..."; \
+		aws cloudformation wait stack-delete-complete --stack-name CDKToolkit --region $(AWS_REGION) 2>/dev/null || true; \
+		echo "清理S3桶..."; \
+		aws s3 rb s3://cdk-$(CDK_BOOTSTRAP_QUALIFIER)-assets-$(ACCOUNT_ID)-$(AWS_REGION) --force 2>/dev/null || true; \
+		echo "清理ECR仓库..."; \
+		aws ecr delete-repository --repository-name cdk-$(CDK_BOOTSTRAP_QUALIFIER)-container-assets-$(ACCOUNT_ID)-$(AWS_REGION) --force --region $(AWS_REGION) 2>/dev/null || true; \
+		echo "✅ CDK Bootstrap资源清理完成"; \
+	else \
+		echo "取消清理"; \
+	fi
 
 # 合成CloudFormation模板
 synth:
@@ -203,41 +287,89 @@ test-lambda:
 	cat /tmp/response.json | jq '.body' | jq -r . | jq '.sources[0]' | head -10; \
 	rm -f /tmp/payload.txt /tmp/response.json
 
-# 构建Lambda包（修复的21MB版本）
+# 构建Lambda包（修复的Linux兼容版本）
 build-lambda-fixed:
-	@echo "📦 构建修复版Lambda包（21MB优化版）..."
-	@echo "  包含pymilvus修复和轻量级stubs"
+	@echo "📦 构建Linux兼容的Lambda包..."
+	@echo "  强制使用Docker确保Linux兼容性"
+	
+	# 检查Docker
+	@if ! which docker >/dev/null 2>&1; then \
+		echo "❌ Docker未安装！请安装Docker:"; \
+		echo "  macOS: brew install --cask docker"; \
+		echo "  Linux: curl -fsSL https://get.docker.com | sh"; \
+		exit 1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "❌ Docker daemon未运行！请启动Docker Desktop"; \
+		exit 1; \
+	fi
+	
+	# 清理旧的构建目录
 	@if [ -d lambda_build_temp ]; then \
-		echo "清理旧的构建目录..."; \
+		echo "🧹 清理旧的构建目录..."; \
 		rm -rf lambda_build_temp; \
 	fi
 	@mkdir -p lambda_build_temp/query lambda_build_temp/ingest
 	
 	# 复制handler文件
-	@cp app/controllers/lambda_handlers/query_handler.py lambda_build_temp/query/
+	@echo "📋 复制Lambda handler文件..."
+	@cp app/controllers/lambda_handlers/query_handler_v2.py lambda_build_temp/query/query_handler.py
 	@cp app/controllers/lambda_handlers/ingest_handler.py lambda_build_temp/ingest/
+	@cp app/controllers/lambda_handlers/cors_helper.py lambda_build_temp/query/ 2>/dev/null || true
+	@cp app/controllers/lambda_handlers/cors_helper.py lambda_build_temp/ingest/ 2>/dev/null || true
+	
+	# 复制app模块
+	@echo "📋 复制app模块..."
+	@for dir in query ingest; do \
+		mkdir -p lambda_build_temp/$$dir/app/models; \
+		mkdir -p lambda_build_temp/$$dir/app/controllers; \
+		cp -r app/models/*.py lambda_build_temp/$$dir/app/models/ 2>/dev/null || true; \
+		touch lambda_build_temp/$$dir/app/__init__.py; \
+		touch lambda_build_temp/$$dir/app/models/__init__.py; \
+	done
 	
 	# 使用Docker构建依赖（Linux兼容）
 	@echo "🐳 使用Docker构建Linux兼容依赖..."
-	@which docker >/dev/null 2>&1 || { echo "❌ Docker未安装，无法构建Linux兼容包"; exit 1; }
 	@docker run --rm \
 		-v $$(pwd):/workspace \
 		-w /workspace \
 		--platform linux/amd64 \
 		python:3.9-slim \
-		bash -c "pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/query/ && \
-				pip install pymilvus grpcio protobuf boto3 python-dotenv -t lambda_build_temp/ingest/"
+		bash -c "pip install --no-cache-dir \
+			'numpy<2.0,>=1.19.0' \
+			'pandas<2.0.0' \
+			'pymilvus>=2.3.0' \
+			'grpcio>=1.48.0' \
+			'protobuf>=3.20.0' \
+			'boto3>=1.34.0' \
+			'python-dotenv>=1.0.0' \
+			'pydantic>=2.6.1' \
+			'pydantic-settings>=2.2.1' \
+			'ujson>=5.0.0' \
+			-t lambda_build_temp/query/ --upgrade && \
+		pip install --no-cache-dir \
+			'numpy<2.0,>=1.19.0' \
+			'pandas<2.0.0' \
+			'pymilvus>=2.3.0' \
+			'grpcio>=1.48.0' \
+			'protobuf>=3.20.0' \
+			'boto3>=1.34.0' \
+			'python-dotenv>=1.0.0' \
+			'pydantic>=2.6.1' \
+			'pydantic-settings>=2.2.1' \
+			'ujson>=5.0.0' \
+			-t lambda_build_temp/ingest/ --upgrade"
 	
-	# 复制numpy和pandas stubs
-	@cp app/controllers/lambda_handlers/numpy_stub.py lambda_build_temp/query/numpy/__init__.py 2>/dev/null || true
-	@cp app/controllers/lambda_handlers/numpy_stub.py lambda_build_temp/ingest/numpy/__init__.py 2>/dev/null || true
-	@mkdir -p lambda_build_temp/query/pandas/api lambda_build_temp/ingest/pandas/api
-	@cp app/controllers/lambda_handlers/pandas_stub.py lambda_build_temp/query/pandas/__init__.py 2>/dev/null || true
-	@cp app/controllers/lambda_handlers/pandas_stub.py lambda_build_temp/ingest/pandas/__init__.py 2>/dev/null || true
+	# 清理不必要的文件
+	@echo "🧹 清理不必要的文件..."
+	@find lambda_build_temp -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find lambda_build_temp -type d -name "*.dist-info" ! -name "pymilvus*" -exec rm -rf {} + 2>/dev/null || true
+	@find lambda_build_temp -type f -name "*.pyc" -delete 2>/dev/null || true
 	
 	# 打包
-	@cd lambda_build_temp/query && zip -r ../../zilliz-rag-query.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q
-	@cd lambda_build_temp/ingest && zip -r ../../zilliz-rag-ingest.zip . -x "*.pyc" "*__pycache__*" "*.dist-info/*" -q
+	@echo "📦 创建ZIP包..."
+	@cd lambda_build_temp/query && zip -r ../../zilliz-rag-query.zip . -x "*.pyc" "*__pycache__*" -q
+	@cd lambda_build_temp/ingest && zip -r ../../zilliz-rag-ingest.zip . -x "*.pyc" "*__pycache__*" -q
 	
 	@echo "✅ Lambda包构建完成："
 	@ls -lh zilliz-rag-*.zip | awk '{print "  " $$9 ": " $$5}'
@@ -357,15 +489,143 @@ logs-lambda:
 	@echo "如需实时日志，运行："
 	@echo "  aws logs tail /aws/lambda/rag-query-handler --follow --region $(AWS_REGION)"
 
-# 完整部署（推荐）
-deploy: check-env build-lambda
-	@echo "🚀 部署RAG应用（包含所有修复）..."
-	@echo "  使用API V2: $(USE_API_V2)"
-	@echo "  阶段: $(STAGE)"
-	@echo "  区域: $(AWS_REGION)"
-	@echo "  CDK_DEFAULT_REGION: $(CDK_DEFAULT_REGION)"
+# 构建容器镜像
+build-container:
+	@echo "🐳 构建Docker容器镜像..."
+	@echo "  平台: linux/amd64"
+	@echo "  镜像标签: $(ECR_IMAGE_TAG)"
 	
-	# 部署所有栈（强制使用.env中的区域配置）
+	# 检查Docker
+	@if ! which docker >/dev/null 2>&1; then \
+		echo "❌ Docker未安装！请安装Docker:"; \
+		echo "  macOS: brew install --cask docker"; \
+		echo "  Linux: curl -fsSL https://get.docker.com | sh"; \
+		exit 1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "❌ Docker daemon未运行！请启动Docker Desktop"; \
+		exit 1; \
+	fi
+	
+	# 构建镜像
+	@docker buildx build \
+		--platform linux/amd64 \
+		--provenance=false \
+		-t $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) \
+		-f Dockerfile.lambda \
+		.
+	@echo "✅ Docker镜像构建完成"
+
+# 推送容器镜像到ECR
+push-container: build-container
+	@echo "📤 推送Docker镜像到ECR..."
+	
+	# 创建ECR仓库（如果不存在）
+	@echo "  🔍 检查ECR仓库..."
+	@aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_NAME) --region $(AWS_REGION) >/dev/null 2>&1 || \
+		(echo "  📦 创建新的ECR仓库..." && \
+		aws ecr create-repository \
+			--repository-name $(ECR_REPOSITORY_NAME) \
+			--region $(AWS_REGION) \
+			--image-scanning-configuration scanOnPush=true \
+			--image-tag-mutability MUTABLE \
+			--no-cli-pager)
+	
+	# 登录到ECR
+	@echo "  🔐 登录ECR..."
+	@aws ecr get-login-password --region $(AWS_REGION) --no-cli-pager | \
+		docker login --username AWS --password-stdin \
+		$(ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com >/dev/null 2>&1 && \
+		echo "  ✅ ECR登录成功"
+	
+	# 标记并推送镜像
+	@echo "  🏷️  标记镜像..."
+	@docker tag $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) $(ECR_IMAGE_URI)
+	@echo "  📤 推送镜像到ECR（这可能需要几分钟）..."
+	@docker push $(ECR_IMAGE_URI) --quiet 2>/dev/null || docker push $(ECR_IMAGE_URI)
+	@echo "✅ 镜像推送成功: $(ECR_IMAGE_URI)"
+
+# 一键部署容器镜像到Lambda（推荐）
+deploy-container: push-container
+	@echo "🚀 部署容器镜像到Lambda..."
+	
+	# 从CloudFormation栈输出获取Lambda函数名
+	$(eval LAMBDA_FUNCTION_NAME := $(GET_LAMBDA_FUNCTION_NAME))
+	
+	# 检查是否成功获取函数名
+	@if [ -z "$(LAMBDA_FUNCTION_NAME)" ]; then \
+		echo "❌ 无法获取Lambda函数名"; \
+		echo "  请确认栈 RAG-API-$(STAGE) 已部署"; \
+		echo "  运行 'make deploy' 创建基础架构"; \
+		exit 1; \
+	else \
+		echo "  Lambda函数名: $(LAMBDA_FUNCTION_NAME)"; \
+	fi
+	
+	# 更新Lambda函数镜像
+	@echo "📦 更新Lambda函数镜像..."
+	@aws lambda update-function-code \
+		--function-name $(LAMBDA_FUNCTION_NAME) \
+		--image-uri $(ECR_IMAGE_URI) \
+		--region $(AWS_REGION) \
+		--output json | jq '{FunctionName, LastUpdateStatus, State}'
+	
+	# 等待Lambda更新完成
+	@echo "⏳ 等待Lambda更新完成..."
+	@aws lambda wait function-updated \
+		--function-name $(LAMBDA_FUNCTION_NAME) \
+		--region $(AWS_REGION)
+	
+	@echo "✅ Lambda函数更新完成！"
+	
+	# 测试API
+	@echo "🧪 测试API健康检查..."
+	@curl -s https://9j0pdvhnya.execute-api.us-east-1.amazonaws.com/prod/health | python3 -m json.tool || true
+	@echo ""
+	@echo "✅ 容器镜像部署完成！"
+	@echo "  镜像URI: $(ECR_IMAGE_URI)"
+
+# 清理ECR仓库
+clean-ecr:
+	@echo "🧹 清理ECR仓库..."
+	@read -p "确定要删除ECR仓库 $(ECR_REPOSITORY_NAME) 吗？(y/N) " confirm && \
+	if [ "$$confirm" = "y" ]; then \
+		aws ecr delete-repository \
+			--repository-name $(ECR_REPOSITORY_NAME) \
+			--region $(AWS_REGION) \
+			--force && \
+		echo "✅ ECR仓库已删除"; \
+	else \
+		echo "取消删除"; \
+	fi
+
+# 快速更新Lambda（仅重新构建和部署容器）
+update-lambda: deploy-container
+	@echo "✅ Lambda函数快速更新完成！"
+
+# 检查ECR镜像是否存在
+check-ecr-image:
+	@aws ecr describe-images \
+		--repository-name $(ECR_REPOSITORY_NAME) \
+		--image-ids imageTag=$(ECR_IMAGE_TAG) \
+		--region $(AWS_REGION) >/dev/null 2>&1 && echo "true" || echo "false"
+
+# 快速部署（跳过镜像构建如果已存在）
+deploy-quick: check-env
+	@echo "🚀 快速部署RAG应用..."
+	@echo "  检查ECR镜像是否存在..."
+	
+	@if [ "$$($(MAKE) -s check-ecr-image)" = "false" ]; then \
+		echo "  ❌ 镜像不存在，需要构建"; \
+		$(MAKE) build-container; \
+		$(MAKE) push-container; \
+	else \
+		echo "  ✅ 镜像已存在，跳过构建"; \
+	fi
+	
+	# 部署CDK栈
+	@echo ""
+	@echo "☁️  部署CDK栈..."
 	cd infrastructure && \
 		AWS_REGION=$(AWS_REGION) \
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
@@ -381,14 +641,62 @@ deploy: check-env build-lambda
 		--context stage=$(STAGE) \
 		--require-approval never
 	
+	@$(MAKE) generate-config
+	@$(MAKE) update-frontend
+	
+	@echo ""
+	@echo "✅ 快速部署完成！"
+
+# 完整部署（使用容器镜像）
+deploy: check-env
+	@echo "🚀 部署RAG应用（容器镜像版本）..."
+	@echo "  使用API V2: $(USE_API_V2)"
+	@echo "  阶段: $(STAGE)"
+	@echo "  区域: $(AWS_REGION)"
+	@echo "  部署方式: Docker容器镜像"
+	
+	# 先构建并推送容器镜像到ECR（确保镜像存在）
+	@echo ""
+	@echo "📦 步骤1: 构建并推送容器镜像..."
+	@$(MAKE) build-container
+	@$(MAKE) push-container
+	
+	# 部署CDK栈
+	@echo ""
+	@echo "☁️  步骤2: 部署CDK栈..."
+	cd infrastructure && \
+		AWS_REGION=$(AWS_REGION) \
+		AWS_DEFAULT_REGION=$(AWS_REGION) \
+		CDK_DEFAULT_REGION=$(AWS_REGION) \
+		USE_API_V2=$(USE_API_V2) \
+		BEDROCK_MODEL_ID=$(BEDROCK_MODEL_ID) \
+		EMBEDDING_MODEL_ID=$(EMBEDDING_MODEL_ID) \
+		ZILLIZ_ENDPOINT=$(ZILLIZ_ENDPOINT) \
+		ZILLIZ_TOKEN=$(ZILLIZ_TOKEN) \
+		ZILLIZ_COLLECTION=$(ZILLIZ_COLLECTION) \
+		cdk deploy --all \
+		--app "python3 $(CDK_APP)" \
+		--context stage=$(STAGE) \
+		--require-approval never
+	
+	# 更新Lambda函数为最新镜像
+	@echo ""
+	@echo "🔄 步骤3: 更新Lambda函数..."
+	@$(MAKE) deploy-container
+	
 	# 生成前端配置
+	@echo ""
+	@echo "⚙️  步骤4: 生成前端配置..."
 	@$(MAKE) generate-config
 	
 	# 更新前端
+	@echo ""
+	@echo "🌐 步骤5: 更新前端..."
 	@$(MAKE) update-frontend
 	
+	@echo ""
 	@echo "✅ 部署完成！"
-	@echo "📌 访问应用: $$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontURL`].OutputValue' --output text)"
+	@echo "📌 访问应用: $$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontURL`].OutputValue' --output text 2>/dev/null || echo '正在获取URL...')"
 
 # 仅部署数据栈
 deploy-data:
@@ -527,21 +835,27 @@ test-ui:
 	@echo "🧪 测试UI功能..."
 	python3 tests/test_ui_functionality.py
 
-# 销毁资源
-destroy: build-lambda
-	@echo "💥 销毁所有CDK资源..."
-	@read -p "确定要销毁所有资源吗？(y/N) " confirm && \
-	if [ "$$confirm" = "y" ]; then \
-		cd infrastructure && \
-		$(SET_AWS_ENV) \
-		cdk destroy --all --app "python3 $(CDK_APP)" --force && \
-		cd .. && \
-		echo "🧹 清理临时构建目录..." && \
-		rm -rf lambda_build_temp && \
-		echo "✅ 临时目录已清理"; \
-	else \
-		echo "取消销毁"; \
-	fi
+# 销毁资源 - 智能版本（零技术债务）
+destroy:
+	@echo "🚀 智能销毁 AWS 资源..."
+	@echo "  使用 CloudFormation API 确保状态一致性"
+	@echo ""
+	@python3 scripts/destroy_stacks_v2.py --region $(AWS_REGION) --timeout 3600
+
+# 简单销毁 - 仅使用 CDK（备用方案）
+destroy-simple:
+	@echo "🗑️  使用 CDK 销毁所有栈..."
+	@cd infrastructure && \
+	cdk destroy --all \
+		--app "python3 $(CDK_APP)" \
+		--force && \
+	cd .. && \
+	echo "✅ 完成"
+
+# 检查栈状态
+check-stacks:
+	@echo "📊 检查栈状态..."
+	@python3 scripts/destroy_stacks_v2.py --region $(AWS_REGION) --check-only
 
 # 检查环境变量
 check-env:
@@ -559,6 +873,119 @@ check-env:
 	fi
 	@echo "✅ 环境配置检查完成"
 
-# 一键部署和测试
+# 一键部署和测试（使用容器镜像）
 all: clean install deploy verify-deploy test-api
 	@echo "🎉 完整部署和测试完成！"
+	@echo "  部署方式: Docker容器镜像"
+	@echo "  镜像URI: $(ECR_IMAGE_URI)"
+
+# 清理CloudWatch日志组
+clean-logs:
+	@echo "🧹 清理CloudWatch日志组..."
+	@echo "  正在搜索RAG相关的日志组..."
+	@LOG_COUNT=$$(aws logs describe-log-groups \
+		--query "logGroups[?contains(logGroupName, 'RAG-') || contains(logGroupName, 'rag-')].logGroupName" \
+		--output text --region $(AWS_REGION) 2>/dev/null | wc -w); \
+	if [ "$$LOG_COUNT" -gt 0 ]; then \
+		echo "  发现 $$LOG_COUNT 个日志组"; \
+		read -p "确定要删除这些日志组吗？(y/N) " confirm && \
+		if [ "$$confirm" = "y" ]; then \
+			for log_group in $$(aws logs describe-log-groups \
+				--query "logGroups[?contains(logGroupName, 'RAG-') || contains(logGroupName, 'rag-')].logGroupName" \
+				--output text --region $(AWS_REGION)); do \
+				echo "  删除: $$log_group" && \
+				aws logs delete-log-group --log-group-name "$$log_group" --region $(AWS_REGION) 2>/dev/null || true; \
+			done; \
+			echo "✅ CloudWatch日志组清理完成"; \
+		else \
+			echo "❌ 取消清理操作"; \
+		fi; \
+	else \
+		echo "  没有发现需要清理的日志组"; \
+	fi
+
+# 强制销毁（跳过确认）
+destroy-force:
+	@echo "💥 强制销毁所有资源..."
+	@python3 scripts/destroy_stacks_v2.py --region $(AWS_REGION) --force --timeout 3600
+
+# 修复失败的栈
+fix-failed-stacks:
+	@echo "🔧 修复 DELETE_FAILED 状态的栈..."
+	@FAILED_STACKS=$$(aws cloudformation list-stacks \
+		--stack-status-filter DELETE_FAILED \
+		--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
+		--output text --region $(AWS_REGION) 2>/dev/null); \
+	if [ -z "$$FAILED_STACKS" ]; then \
+		echo "✅ 没有失败的栈需要修复"; \
+	else \
+		echo "发现失败的栈: $$FAILED_STACKS"; \
+		for stack in $$FAILED_STACKS; do \
+			echo ""; \
+			echo "处理栈: $$stack"; \
+			echo "1. 尝试标准删除..."; \
+			aws cloudformation delete-stack \
+				--stack-name $$stack \
+				--region $(AWS_REGION) 2>/dev/null && \
+			echo "   ✅ 成功" && continue || echo "   ❌ 失败，尝试其他方法"; \
+			echo "2. 获取失败的资源..."; \
+			FAILED_RESOURCES=$$(aws cloudformation describe-stack-resources \
+				--stack-name $$stack \
+				--query "StackResources[?ResourceStatus=='DELETE_FAILED'].LogicalResourceId" \
+				--output text --region $(AWS_REGION) 2>/dev/null | tr '\n' ' '); \
+			if [ -n "$$FAILED_RESOURCES" ]; then \
+				echo "   发现失败资源: $$FAILED_RESOURCES"; \
+				echo "3. 跳过失败资源并删除栈..."; \
+				aws cloudformation delete-stack \
+					--stack-name $$stack \
+					--retain-resources $$FAILED_RESOURCES \
+					--region $(AWS_REGION) && \
+				echo "   ✅ 栈已标记为删除（保留失败的资源）" || \
+				echo "   ❌ 无法删除栈"; \
+			fi; \
+		done; \
+		echo ""; \
+		echo "💡 提示: 运行 'make check-stacks' 查看栈状态"; \
+	fi
+
+# 清理孤立资源（仅在必要时使用）
+clean-orphaned:
+	@echo "🧹 清理孤立资源（栈已删除但资源仍存在）..."
+	@echo "⚠️  警告: 这应该是最后的手段"
+	@echo ""
+	@read -p "确定要清理孤立资源吗？(y/N) " confirm && \
+	if [ "$$confirm" = "y" ]; then \
+		echo "清理本地 Docker 资源..."; \
+		docker rmi $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) 2>/dev/null || true; \
+		docker rmi $(ECR_IMAGE_URI) 2>/dev/null || true; \
+		echo "清理构建产物..."; \
+		rm -rf lambda_build_temp; \
+		rm -rf zilliz-rag-*.zip; \
+		rm -rf infrastructure/cdk.out; \
+		echo "✅ 孤立资源清理完成"; \
+	else \
+		echo "取消清理"; \
+	fi
+
+# 清理所有资源（包括CDK Bootstrap）
+clean-all: destroy-force clean-bootstrap
+	@echo "✅ 所有资源清理完成（包括CDK Bootstrap）"
+
+# 销毁命令帮助
+help-destroy:
+	@echo "🎯 销毁命令最佳实践"
+	@echo ""
+	@echo "推荐流程:"
+	@echo "  1. make check-stacks       # 检查栈状态"
+	@echo "  2. make destroy            # 智能销毁（推荐）"
+	@echo ""
+	@echo "如果遇到问题:"
+	@echo "  1. make fix-failed-stacks  # 修复失败的栈"
+	@echo "  2. make destroy-force      # 强制销毁"
+	@echo "  3. make clean-orphaned     # 清理孤立资源（最后手段）"
+	@echo ""
+	@echo "核心原则:"
+	@echo "  ✅ 通过 CloudFormation API 管理资源"
+	@echo "  ✅ 不直接删除 AWS 资源"
+	@echo "  ✅ 让 CDK 处理依赖关系"
+	@echo "  ✅ 零技术债务"

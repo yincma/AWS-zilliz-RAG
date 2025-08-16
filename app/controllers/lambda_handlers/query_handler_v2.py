@@ -9,10 +9,26 @@ import sys
 
 # 添加app目录到Python路径
 sys.path.insert(0, '/var/task')
+sys.path.insert(0, '/opt/python')  # Lambda Layer路径（如果有）
 
 # 设置日志
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# 诊断导入环境
+try:
+    import pymilvus
+    logger.info(f"✅ pymilvus successfully imported, version: {pymilvus.__version__}")
+except ImportError as e:
+    logger.error(f"❌ Failed to import pymilvus: {str(e)}")
+    logger.error(f"Python path: {sys.path}")
+    import subprocess
+    try:
+        # 列出已安装的包以帮助诊断
+        result = subprocess.run(['pip', 'list'], capture_output=True, text=True)
+        logger.info(f"Installed packages: {result.stdout}")
+    except:
+        pass
 
 # 全局变量用于缓存RAG实例
 rag_instance = None
@@ -24,9 +40,16 @@ def get_rag_instance():
         try:
             from app.models.rag_simple import SimpleRAG
             rag_instance = SimpleRAG()
-            logger.info("RAG instance created successfully")
+            logger.info("✅ RAG instance created successfully")
+        except ImportError as e:
+            logger.error(f"❌ Import error creating RAG instance: {str(e)}")
+            import traceback
+            logger.error(f"Import traceback: {traceback.format_exc()}")
+            rag_instance = None
         except Exception as e:
-            logger.error(f"Failed to create RAG instance: {str(e)}")
+            logger.error(f"❌ General error creating RAG instance: {str(e)}")
+            import traceback
+            logger.error(f"General traceback: {traceback.format_exc()}")
             rag_instance = None
     return rag_instance
 
