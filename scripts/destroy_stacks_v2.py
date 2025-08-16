@@ -209,7 +209,7 @@ class StackDestroyer:
                             if 'in use by' in recent_event['ResourceStatusReason']:
                                 # 导出依赖问题，等待后重试
                                 print(f"  ⏳ 等待 30 秒后重试...")
-                                time.sleep(30)
+                                time.sleep(50)
                                 continue
                         else:
                             print(f"  ⚠️  栈状态: {stack_status}，等待后重试...")
