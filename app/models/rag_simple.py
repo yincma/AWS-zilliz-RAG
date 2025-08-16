@@ -5,6 +5,7 @@
 import json
 import os
 import logging
+import math
 from typing import List, Dict, Any, Optional
 import boto3
 from dataclasses import dataclass
@@ -38,7 +39,8 @@ class SimpleEmbedding:
             'bedrock-runtime',
             region_name=os.environ.get('AWS_REGION', 'us-east-1')
         )
-        self.model_id = os.environ.get('EMBEDDING_MODEL_ID', 'amazon.titan-embed-text-v2:0')
+        self.model_id = os.environ.get('EMBEDDING_MODEL_ID', 'amazon.titan-embed-text-v1')
+        logger.info(f"SimpleEmbedding initialized with model: {self.model_id}")
     
     def generate_embedding(self, text: str) -> List[float]:
         """生成文本嵌入向量"""
@@ -52,7 +54,9 @@ class SimpleEmbedding:
             )
             
             result = json.loads(response['body'].read())
-            return result.get('embedding', [])
+            embedding = result.get('embedding', [])
+            logger.info(f"Generated embedding with dimension: {len(embedding)} using model: {self.model_id}")
+            return embedding
             
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
@@ -181,7 +185,7 @@ class SimpleVectorStore:
                     anns_field="embedding",
                     param=search_params,
                     limit=top_k,
-                    output_fields=["text", "metadata"]
+                    output_fields=["content", "metadata"]  # 使用正确的字段名 "content"
                 )
                 
                 documents = []
@@ -191,11 +195,11 @@ class SimpleVectorStore:
                     try:
                         # Try dict-like access if entity is a dict
                         if isinstance(hit.entity, dict):
-                            text = hit.entity.get("text", "")
+                            text = hit.entity.get("content", "")  # 使用 "content" 而不是 "text"
                             metadata = hit.entity.get("metadata", {})
                         else:
                             # Use attribute access for object-like entities
-                            text = getattr(hit.entity, "text", "")
+                            text = getattr(hit.entity, "content", "")  # 使用 "content" 而不是 "text"
                             metadata = getattr(hit.entity, "metadata", {})
                     except (AttributeError, TypeError) as e:
                         logger.error(f"Error accessing entity fields: {str(e)}")
@@ -203,12 +207,14 @@ class SimpleVectorStore:
                         text = ""
                         metadata = {}
                     
-                    # Get distance/score (L2 distance - smaller is better)
-                    # Convert L2 distance to similarity score (0-100)
-                    distance = getattr(hit, 'distance', 0)
-                    # Convert distance to similarity percentage (inverse relationship)
-                    # Using a simple formula: score = max(0, 100 - distance * 10)
-                    score = max(0, min(100, 100 - distance * 10))
+                    # Get distance/score (L2² - Zilliz returns squared L2 distance)
+                    # Convert L2² to similarity score (0-100)
+                    distance_squared = getattr(hit, 'distance', 0)
+                    # Zilliz returns L2², need to sqrt to get actual L2 distance
+                    actual_distance = math.sqrt(distance_squared) if distance_squared > 0 else 0
+                    # Convert to similarity score: closer = higher score
+                    # Using more reasonable scale: 0-10 → 100-75, 10-20 → 75-50, 20-40 → 50-0
+                    score = max(0, min(100, 100 - actual_distance * 2.5))
                     
                     doc = Document(
                         content=text,
@@ -463,11 +469,24 @@ class SimpleRAG:
                 for doc in relevant_docs
             ]
             
+            # 基于实际相似度计算置信度
+            if not relevant_docs:
+                confidence = 0.2
+            else:
+                doc_scores = [doc.score for doc in relevant_docs if doc.score is not None]
+                if doc_scores:
+                    max_score = max(doc_scores)
+                    avg_score = sum(doc_scores) / len(doc_scores)
+                    # 置信度基于最高分(70%)和平均分(30%)
+                    confidence = min(1.0, (max_score * 0.7 + avg_score * 0.3) / 100)
+                else:
+                    confidence = 0.3
+            
             return RAGResponse(
                 answer=answer,
                 sources=sources,
                 query=query,
-                confidence=0.8 if relevant_docs else 0.3
+                confidence=confidence
             )
             
         except Exception as e:

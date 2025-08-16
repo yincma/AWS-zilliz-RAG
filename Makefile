@@ -6,7 +6,8 @@
 	deploy-lambda-direct update-lambda-env list-lambda logs-lambda \
 	deploy-data deploy-api deploy-web _update_frontend_common \
 	fix-cors fix-cloudfront verify-deploy test-api test-ui all redeploy-lambda test-lambda sync-cors-helper \
-	build-container push-container deploy-container clean-ecr update-lambda
+	build-container push-container deploy-container clean-ecr update-lambda deploy-quick check-ecr-image \
+	clean-logs destroy-force clean-all
 
 # 设置默认目标
 .DEFAULT_GOAL := help
@@ -84,12 +85,16 @@ help:
 	@echo "  make update-lambda-env    - 更新Lambda环境变量"
 	@echo ""
 	@echo "☁️  部署管理:"
-	@echo "  make deploy           - 完整部署应用到AWS"
+	@echo "  make deploy           - 完整部署应用到AWS（自动构建镜像）"
+	@echo "  make deploy-quick     - 快速部署（跳过镜像构建如果已存在）"
 	@echo "  make deploy-web       - 仅部署Web栈"
 	@echo "  make deploy-api       - 仅部署API栈"
 	@echo "  make update-frontend  - 仅更新前端配置"
 	@echo "  make generate-config  - 生成前端API配置"
-	@echo "  make destroy          - 销毁所有资源"
+	@echo "  make destroy          - 销毁所有资源（智能清理）"
+	@echo "  make destroy-force    - 强制销毁所有资源（跳过确认）"
+	@echo "  make clean-logs       - 清理CloudWatch日志组"
+	@echo "  make clean-all        - 清理所有AWS和本地资源"
 	@echo ""
 	@echo "🔍 CDK操作:"
 	@echo "  make synth            - 合成CloudFormation模板"
@@ -517,15 +522,29 @@ clean-ecr:
 update-lambda: deploy-container
 	@echo "✅ Lambda函数快速更新完成！"
 
-# 完整部署（使用容器镜像）
-deploy: check-env
-	@echo "🚀 部署RAG应用（容器镜像版本）..."
-	@echo "  使用API V2: $(USE_API_V2)"
-	@echo "  阶段: $(STAGE)"
-	@echo "  区域: $(AWS_REGION)"
-	@echo "  部署方式: Docker容器镜像"
+# 检查ECR镜像是否存在
+check-ecr-image:
+	@aws ecr describe-images \
+		--repository-name $(ECR_REPOSITORY_NAME) \
+		--image-ids imageTag=$(ECR_IMAGE_TAG) \
+		--region $(AWS_REGION) >/dev/null 2>&1 && echo "true" || echo "false"
+
+# 快速部署（跳过镜像构建如果已存在）
+deploy-quick: check-env
+	@echo "🚀 快速部署RAG应用..."
+	@echo "  检查ECR镜像是否存在..."
+	
+	@if [ "$$($(MAKE) -s check-ecr-image)" = "false" ]; then \
+		echo "  ❌ 镜像不存在，需要构建"; \
+		$(MAKE) build-container; \
+		$(MAKE) push-container; \
+	else \
+		echo "  ✅ 镜像已存在，跳过构建"; \
+	fi
 	
 	# 部署CDK栈
+	@echo ""
+	@echo "☁️  部署CDK栈..."
 	cd infrastructure && \
 		AWS_REGION=$(AWS_REGION) \
 		AWS_DEFAULT_REGION=$(AWS_REGION) \
@@ -541,17 +560,62 @@ deploy: check-env
 		--context stage=$(STAGE) \
 		--require-approval never
 	
-	# 构建并部署容器镜像
+	@$(MAKE) generate-config
+	@$(MAKE) update-frontend
+	
+	@echo ""
+	@echo "✅ 快速部署完成！"
+
+# 完整部署（使用容器镜像）
+deploy: check-env
+	@echo "🚀 部署RAG应用（容器镜像版本）..."
+	@echo "  使用API V2: $(USE_API_V2)"
+	@echo "  阶段: $(STAGE)"
+	@echo "  区域: $(AWS_REGION)"
+	@echo "  部署方式: Docker容器镜像"
+	
+	# 先构建并推送容器镜像到ECR（确保镜像存在）
+	@echo ""
+	@echo "📦 步骤1: 构建并推送容器镜像..."
+	@$(MAKE) build-container
+	@$(MAKE) push-container
+	
+	# 部署CDK栈
+	@echo ""
+	@echo "☁️  步骤2: 部署CDK栈..."
+	cd infrastructure && \
+		AWS_REGION=$(AWS_REGION) \
+		AWS_DEFAULT_REGION=$(AWS_REGION) \
+		CDK_DEFAULT_REGION=$(AWS_REGION) \
+		USE_API_V2=$(USE_API_V2) \
+		BEDROCK_MODEL_ID=$(BEDROCK_MODEL_ID) \
+		EMBEDDING_MODEL_ID=$(EMBEDDING_MODEL_ID) \
+		ZILLIZ_ENDPOINT=$(ZILLIZ_ENDPOINT) \
+		ZILLIZ_TOKEN=$(ZILLIZ_TOKEN) \
+		ZILLIZ_COLLECTION=$(ZILLIZ_COLLECTION) \
+		cdk deploy --all \
+		--app "python3 $(CDK_APP)" \
+		--context stage=$(STAGE) \
+		--require-approval never
+	
+	# 更新Lambda函数为最新镜像
+	@echo ""
+	@echo "🔄 步骤3: 更新Lambda函数..."
 	@$(MAKE) deploy-container
 	
 	# 生成前端配置
+	@echo ""
+	@echo "⚙️  步骤4: 生成前端配置..."
 	@$(MAKE) generate-config
 	
 	# 更新前端
+	@echo ""
+	@echo "🌐 步骤5: 更新前端..."
 	@$(MAKE) update-frontend
 	
+	@echo ""
 	@echo "✅ 部署完成！"
-	@echo "📌 访问应用: $$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontURL`].OutputValue' --output text)"
+	@echo "📌 访问应用: $$(aws cloudformation describe-stacks --stack-name RAG-Web-$(STAGE) --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontURL`].OutputValue' --output text 2>/dev/null || echo '正在获取URL...')"
 
 # 仅部署数据栈
 deploy-data:
@@ -690,7 +754,7 @@ test-ui:
 	@echo "🧪 测试UI功能..."
 	python3 tests/test_ui_functionality.py
 
-# 销毁资源 - 增强版本，确保一次性完成
+# 销毁资源 - 增强版本，确保完全清理
 destroy:
 	@echo "💥 销毁所有AWS资源..."
 	@read -p "确定要销毁所有资源吗？(y/N) " confirm && \
@@ -702,51 +766,69 @@ destroy:
 		echo "1️⃣ 清理S3存储桶内容..." && \
 		for bucket in $$(aws s3api list-buckets --query "Buckets[?contains(Name, 'rag-')].Name" --output text); do \
 			echo "  清空S3桶: $$bucket" && \
+			aws s3api put-bucket-versioning --bucket $$bucket --versioning-configuration Status=Suspended 2>/dev/null || true && \
+			aws s3api delete-objects --bucket $$bucket \
+				--delete "$$(aws s3api list-object-versions --bucket $$bucket --output json \
+				--query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}')" 2>/dev/null || true && \
 			aws s3 rm s3://$$bucket --recursive 2>/dev/null || true && \
 			aws s3api delete-bucket --bucket $$bucket --region $(AWS_REGION) 2>/dev/null || true; \
 		done; \
 		echo "  ✅ S3清理完成"; \
 		echo ""; \
 		echo "2️⃣ 清理ECR仓库..." && \
-		aws ecr delete-repository \
-			--repository-name $(ECR_REPOSITORY_NAME) \
-			--region $(AWS_REGION) \
-			--force 2>/dev/null && \
-		echo "  ✅ ECR仓库已删除" || echo "  ⚠️  ECR仓库不存在或已删除"; \
+		for repo in $$(aws ecr describe-repositories --query "repositories[?contains(repositoryName, 'rag-')].repositoryName" --output text 2>/dev/null); do \
+			echo "  删除ECR仓库: $$repo" && \
+			aws ecr delete-repository --repository-name $$repo --region $(AWS_REGION) --force 2>/dev/null || true; \
+		done; \
+		echo "  ✅ ECR清理完成"; \
 		echo ""; \
-		echo "3️⃣ 清理CloudFormation栈..." && \
-		echo "  获取所有RAG相关栈..." && \
+		echo "3️⃣ 删除CloudFormation栈（按照正确顺序）..." && \
+		echo "  处理删除失败的栈..." && \
 		for stack in $$(aws cloudformation list-stacks \
-			--stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
+			--stack-status-filter DELETE_FAILED \
 			--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
 			--output text --region $(AWS_REGION)); do \
-			echo "  发起删除栈: $$stack" && \
-			aws cloudformation delete-stack --stack-name $$stack --region $(AWS_REGION); \
+			echo "    重试删除失败的栈: $$stack" && \
+			aws cloudformation delete-stack --stack-name $$stack --region $(AWS_REGION) 2>/dev/null || true; \
 		done; \
-		echo "  ⏳ 栈删除已发起，等待完成..." && \
-		sleep 5 && \
-		for i in 1 2 3 4 5 6 7 8 9 10 11 12; do \
+		echo "  删除Web栈..." && \
+		aws cloudformation delete-stack --stack-name RAG-Web-$(STAGE) --region $(AWS_REGION) 2>/dev/null || true && \
+		echo "  删除API栈..." && \
+		aws cloudformation delete-stack --stack-name RAG-API-$(STAGE) --region $(AWS_REGION) 2>/dev/null || true && \
+		echo "  删除Data栈..." && \
+		aws cloudformation delete-stack --stack-name RAG-Data-$(STAGE) --region $(AWS_REGION) 2>/dev/null || true && \
+		echo "  ⏳ 等待栈删除完成..." && \
+		for i in $$(seq 1 24); do \
 			remaining=$$(aws cloudformation list-stacks \
-				--stack-status-filter DELETE_IN_PROGRESS \
+				--stack-status-filter DELETE_IN_PROGRESS DELETE_FAILED \
 				--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
-				--output text --region $(AWS_REGION) | wc -w); \
+				--output text --region $(AWS_REGION) 2>/dev/null | wc -w); \
 			if [ "$$remaining" -eq 0 ]; then \
 				echo "  ✅ CloudFormation栈清理完成"; \
 				break; \
 			else \
-				echo "  ⏳ 还有 $$remaining 个栈正在删除，等待10秒..." && \
+				echo "  ⏳ 还有 $$remaining 个栈正在处理，等待10秒... ($$i/24)" && \
 				sleep 10; \
 			fi; \
 		done; \
 		echo ""; \
-		echo "4️⃣ 使用CDK destroy作为备份清理..." && \
+		echo "4️⃣ 清理CloudWatch日志组..." && \
+		for log_group in $$(aws logs describe-log-groups \
+			--query "logGroups[?contains(logGroupName, 'RAG-') || contains(logGroupName, 'rag-')].logGroupName" \
+			--output text --region $(AWS_REGION)); do \
+			echo "  删除日志组: $$log_group" && \
+			aws logs delete-log-group --log-group-name "$$log_group" --region $(AWS_REGION) 2>/dev/null || true; \
+		done; \
+		echo "  ✅ CloudWatch日志组清理完成"; \
+		echo ""; \
+		echo "5️⃣ 使用CDK destroy作为备份清理..." && \
 		cd infrastructure && \
 		$(SET_AWS_ENV) \
 		cdk destroy --all --app "python3 $(CDK_APP)" --force 2>/dev/null || true && \
 		cd .. && \
 		echo "  ✅ CDK清理完成"; \
 		echo ""; \
-		echo "5️⃣ 清理本地资源..." && \
+		echo "6️⃣ 清理本地资源..." && \
 		docker rmi $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) 2>/dev/null || true && \
 		docker rmi $(ECR_IMAGE_URI) 2>/dev/null || true && \
 		rm -rf lambda_build_temp && \
@@ -757,6 +839,17 @@ destroy:
 		echo "======================="; \
 		echo "✅ 🎉 所有资源清理完成！"; \
 		echo ""; \
+		read -p "是否要清理CDK Bootstrap资源？(y/N) " confirm_bootstrap && \
+		if [ "$$confirm_bootstrap" = "y" ]; then \
+			echo "7️⃣ 清理CDK Bootstrap资源..." && \
+			for bucket in $$(aws s3api list-buckets --query "Buckets[?contains(Name, 'cdk-')].Name" --output text); do \
+				echo "  清空CDK Bootstrap S3桶: $$bucket" && \
+				aws s3 rm s3://$$bucket --recursive 2>/dev/null || true && \
+				aws s3api delete-bucket --bucket $$bucket --region $(AWS_REGION) 2>/dev/null || true; \
+			done && \
+			aws cloudformation delete-stack --stack-name CDKToolkit --region $(AWS_REGION) 2>/dev/null || true && \
+			echo "  ✅ CDK Bootstrap清理完成"; \
+		fi; \
 	else \
 		echo "❌ 取消销毁操作"; \
 	fi
@@ -782,3 +875,130 @@ all: clean install deploy verify-deploy test-api
 	@echo "🎉 完整部署和测试完成！"
 	@echo "  部署方式: Docker容器镜像"
 	@echo "  镜像URI: $(ECR_IMAGE_URI)"
+
+# 清理CloudWatch日志组
+clean-logs:
+	@echo "🧹 清理CloudWatch日志组..."
+	@echo "  正在搜索RAG相关的日志组..."
+	@LOG_COUNT=$$(aws logs describe-log-groups \
+		--query "logGroups[?contains(logGroupName, 'RAG-') || contains(logGroupName, 'rag-')].logGroupName" \
+		--output text --region $(AWS_REGION) 2>/dev/null | wc -w); \
+	if [ "$$LOG_COUNT" -gt 0 ]; then \
+		echo "  发现 $$LOG_COUNT 个日志组"; \
+		read -p "确定要删除这些日志组吗？(y/N) " confirm && \
+		if [ "$$confirm" = "y" ]; then \
+			for log_group in $$(aws logs describe-log-groups \
+				--query "logGroups[?contains(logGroupName, 'RAG-') || contains(logGroupName, 'rag-')].logGroupName" \
+				--output text --region $(AWS_REGION)); do \
+				echo "  删除: $$log_group" && \
+				aws logs delete-log-group --log-group-name "$$log_group" --region $(AWS_REGION) 2>/dev/null || true; \
+			done; \
+			echo "✅ CloudWatch日志组清理完成"; \
+		else \
+			echo "❌ 取消清理操作"; \
+		fi; \
+	else \
+		echo "  没有发现需要清理的日志组"; \
+	fi
+
+# 强制销毁（跳过确认）
+destroy-force:
+	@echo "💥 强制销毁所有AWS资源（无需确认）..."
+	@echo ""; \
+	echo "📋 开始强制清理AWS资源..."; \
+	echo "======================="; \
+	echo ""; \
+	echo "1️⃣ 清理S3存储桶..." && \
+	for bucket in $$(aws s3api list-buckets --query "Buckets[?contains(Name, 'rag-')].Name" --output text); do \
+		echo "  强制清空S3桶: $$bucket" && \
+		aws s3api put-bucket-versioning --bucket $$bucket --versioning-configuration Status=Suspended 2>/dev/null || true && \
+		aws s3 rm s3://$$bucket --recursive --force 2>/dev/null || true && \
+		aws s3api delete-bucket --bucket $$bucket --region $(AWS_REGION) 2>/dev/null || true; \
+	done; \
+	echo "  ✅ S3清理完成"; \
+	echo ""; \
+	echo "2️⃣ 清理ECR仓库..." && \
+	for repo in $$(aws ecr describe-repositories --query "repositories[?contains(repositoryName, 'rag-')].repositoryName" --output text 2>/dev/null); do \
+		echo "  删除ECR仓库: $$repo" && \
+		aws ecr delete-repository --repository-name $$repo --region $(AWS_REGION) --force 2>/dev/null || true; \
+	done; \
+	echo "  ✅ ECR清理完成"; \
+	echo ""; \
+	echo "3️⃣ 处理删除失败的栈（跳过资源保留）..." && \
+	for stack in $$(aws cloudformation list-stacks \
+		--stack-status-filter DELETE_FAILED \
+		--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
+		--output text --region $(AWS_REGION)); do \
+		echo "  处理删除失败的栈: $$stack" && \
+		echo "  获取失败的资源..." && \
+		FAILED_RESOURCES=$$(aws cloudformation list-stack-resources \
+			--stack-name $$stack \
+			--query "StackResourceSummaries[?ResourceStatus=='DELETE_FAILED'].LogicalResourceId" \
+			--output text --region $(AWS_REGION) 2>/dev/null) && \
+		if [ -n "$$FAILED_RESOURCES" ]; then \
+			echo "  跳过失败的资源并删除栈..." && \
+			aws cloudformation delete-stack \
+				--stack-name $$stack \
+				--retain-resources $$FAILED_RESOURCES \
+				--region $(AWS_REGION) 2>/dev/null || \
+			aws cloudformation delete-stack \
+				--stack-name $$stack \
+				--region $(AWS_REGION) 2>/dev/null || true; \
+		else \
+			aws cloudformation delete-stack --stack-name $$stack --region $(AWS_REGION) 2>/dev/null || true; \
+		fi; \
+	done; \
+	echo "  删除所有栈..." && \
+	for stack in $$(aws cloudformation list-stacks \
+		--stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
+		--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
+		--output text --region $(AWS_REGION)); do \
+		echo "  强制删除栈: $$stack" && \
+		aws cloudformation delete-stack --stack-name $$stack --region $(AWS_REGION) 2>/dev/null || true; \
+	done; \
+	echo "  ⏳ 等待栈删除..." && \
+	for i in $$(seq 1 12); do \
+		remaining=$$(aws cloudformation list-stacks \
+			--stack-status-filter DELETE_IN_PROGRESS DELETE_FAILED \
+			--query "StackSummaries[?contains(StackName, 'RAG-')].StackName" \
+			--output text --region $(AWS_REGION) 2>/dev/null | wc -w); \
+		if [ "$$remaining" -eq 0 ]; then \
+			echo "  ✅ CloudFormation栈清理完成"; \
+			break; \
+		else \
+			echo "  ⏳ 还有 $$remaining 个栈正在处理... ($$i/12)" && \
+			sleep 10; \
+		fi; \
+	done; \
+	echo ""; \
+	echo "4️⃣ 清理CloudWatch日志组..." && \
+	for log_group in $$(aws logs describe-log-groups \
+		--query "logGroups[?contains(logGroupName, 'RAG-') || contains(logGroupName, 'rag-')].logGroupName" \
+		--output text --region $(AWS_REGION)); do \
+		aws logs delete-log-group --log-group-name "$$log_group" --region $(AWS_REGION) 2>/dev/null || true; \
+	done; \
+	echo "  ✅ CloudWatch日志组清理完成"; \
+	echo ""; \
+	echo "5️⃣ 清理本地资源..." && \
+	docker rmi $(ECR_REPOSITORY_NAME):$(ECR_IMAGE_TAG) 2>/dev/null || true && \
+	docker rmi $(ECR_IMAGE_URI) 2>/dev/null || true && \
+	rm -rf lambda_build_temp && \
+	rm -rf zilliz-rag-*.zip && \
+	rm -rf infrastructure/cdk.out && \
+	echo "  ✅ 本地资源清理完成"; \
+	echo ""; \
+	echo "======================="; \
+	echo "✅ 🎉 强制清理完成！"; \
+	echo ""
+
+# 清理所有资源（包括CDK Bootstrap）
+clean-all: destroy-force
+	@echo "🧹 清理所有资源（包括CDK Bootstrap）..."
+	@echo "清理CDK Bootstrap资源..." && \
+	for bucket in $$(aws s3api list-buckets --query "Buckets[?contains(Name, 'cdk-')].Name" --output text); do \
+		echo "  清空CDK Bootstrap S3桶: $$bucket" && \
+		aws s3 rm s3://$$bucket --recursive --force 2>/dev/null || true && \
+		aws s3api delete-bucket --bucket $$bucket --region $(AWS_REGION) 2>/dev/null || true; \
+	done && \
+	aws cloudformation delete-stack --stack-name CDKToolkit --region $(AWS_REGION) 2>/dev/null || true && \
+	echo "✅ 所有资源清理完成（包括CDK Bootstrap）"
