@@ -3,3 +3,9 @@
 .env
 .env.local
 .env.*.local
+
+# Claude related files
+CLAUDE.md
+.claude/
+*.claude
+.claudeignore
