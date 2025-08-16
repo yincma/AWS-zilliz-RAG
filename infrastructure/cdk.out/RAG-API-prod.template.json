@@ -1,0 +1,2083 @@
+{
+ "Description": "RAG应用API服务栈 V2",
+ "Resources": {
+  "LambdaExecutionRoleD5C26073": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/LambdaExecutionRole/Resource"
+   }
+  },
+  "LambdaExecutionRoleDefaultPolicy6D69732F": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+       ],
+       "Effect": "Allow",
+       "Resource": "*"
+      },
+      {
+       "Action": [
+        "s3:Abort*",
+        "s3:DeleteObject*",
+        "s3:GetBucket*",
+        "s3:GetObject*",
+        "s3:List*",
+        "s3:PutObject",
+        "s3:PutObjectLegalHold",
+        "s3:PutObjectRetention",
+        "s3:PutObjectTagging",
+        "s3:PutObjectVersionTagging"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::ImportValue": "RAG-Data-prod:ExportsOutputFnGetAttDocumentBucketAE41E5A9ArnF6A03022"
+        },
+        {
+         "Fn::Join": [
+          "",
+          [
+           {
+            "Fn::ImportValue": "RAG-Data-prod:ExportsOutputFnGetAttDocumentBucketAE41E5A9ArnF6A03022"
+           },
+           "/*"
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "Roles": [
+     {
+      "Ref": "LambdaExecutionRoleD5C26073"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/LambdaExecutionRole/DefaultPolicy/Resource"
+   }
+  },
+  "QueryFunctionBDF4DE5B": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ImageUri": {
+      "Fn::Join": [
+       "",
+       [
+        "375004070918.dkr.ecr.us-east-1.",
+        {
+         "Ref": "AWS::URLSuffix"
+        },
+        "/rag-lambda-query:latest"
+       ]
+      ]
+     }
+    },
+    "Description": "RAG查询处理函数（容器版）",
+    "Environment": {
+     "Variables": {
+      "S3_BUCKET": {
+       "Fn::ImportValue": "RAG-Data-prod:ExportsOutputRefDocumentBucketAE41E5A9880EA18D"
+      },
+      "BEDROCK_MODEL_ID": "amazon.nova-pro-v1:0",
+      "EMBEDDING_MODEL_ID": "amazon.titan-embed-text-v1",
+      "ZILLIZ_ENDPOINT": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+      "ZILLIZ_TOKEN": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115",
+      "ZILLIZ_COLLECTION": "rag_collection",
+      "PYTHONPATH": "/var/task",
+      "CORS_ALLOW_ORIGINS": "*",
+      "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+      "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+     }
+    },
+    "ImageConfig": {
+     "Command": [
+      "query_handler.handler"
+     ]
+    },
+    "MemorySize": 1024,
+    "PackageType": "Image",
+    "Role": {
+     "Fn::GetAtt": [
+      "LambdaExecutionRoleD5C26073",
+      "Arn"
+     ]
+    },
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ],
+    "Timeout": 30
+   },
+   "DependsOn": [
+    "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "LambdaExecutionRoleD5C26073"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/QueryFunction/Resource"
+   }
+  },
+  "QueryFunctionLogRetention61CDE44D": {
+   "Type": "Custom::LogRetention",
+   "Properties": {
+    "ServiceToken": {
+     "Fn::GetAtt": [
+      "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aFD4BFC8A",
+      "Arn"
+     ]
+    },
+    "LogGroupName": {
+     "Fn::Join": [
+      "",
+      [
+       "/aws/lambda/",
+       {
+        "Ref": "QueryFunctionBDF4DE5B"
+       }
+      ]
+     ]
+    },
+    "RetentionInDays": 7
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/QueryFunction/LogRetention/Resource"
+   }
+  },
+  "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRole9741ECFB": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8a/ServiceRole/Resource"
+   }
+  },
+  "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRoleDefaultPolicyADDA7DEB": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "logs:DeleteRetentionPolicy",
+        "logs:PutRetentionPolicy"
+       ],
+       "Effect": "Allow",
+       "Resource": "*"
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRoleDefaultPolicyADDA7DEB",
+    "Roles": [
+     {
+      "Ref": "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRole9741ECFB"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8a/ServiceRole/DefaultPolicy/Resource"
+   }
+  },
+  "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aFD4BFC8A": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Handler": "index.handler",
+    "Runtime": "nodejs22.x",
+    "Timeout": 900,
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-375004070918-us-east-1",
+     "S3Key": "2819175352ad1ce0dae768e83fc328fb70fb5f10b4a8ff0ccbcb791f02b0716d.zip"
+    },
+    "Role": {
+     "Fn::GetAtt": [
+      "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRole9741ECFB",
+      "Arn"
+     ]
+    },
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ]
+   },
+   "DependsOn": [
+    "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRoleDefaultPolicyADDA7DEB",
+    "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aServiceRole9741ECFB"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8a/Resource",
+    "aws:asset:path": "asset.2819175352ad1ce0dae768e83fc328fb70fb5f10b4a8ff0ccbcb791f02b0716d",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Code"
+   }
+  },
+  "IngestFunction4B2F2EB2": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ImageUri": {
+      "Fn::Join": [
+       "",
+       [
+        "375004070918.dkr.ecr.us-east-1.",
+        {
+         "Ref": "AWS::URLSuffix"
+        },
+        "/rag-lambda-query:latest"
+       ]
+      ]
+     }
+    },
+    "Description": "文档摄入处理函数（容器版）",
+    "Environment": {
+     "Variables": {
+      "S3_BUCKET": {
+       "Fn::ImportValue": "RAG-Data-prod:ExportsOutputRefDocumentBucketAE41E5A9880EA18D"
+      },
+      "BEDROCK_MODEL_ID": "amazon.nova-pro-v1:0",
+      "EMBEDDING_MODEL_ID": "amazon.titan-embed-text-v1",
+      "ZILLIZ_ENDPOINT": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+      "ZILLIZ_TOKEN": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115",
+      "ZILLIZ_COLLECTION": "rag_collection",
+      "PYTHONPATH": "/var/task",
+      "CORS_ALLOW_ORIGINS": "*",
+      "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+      "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+     }
+    },
+    "ImageConfig": {
+     "Command": [
+      "ingest_handler.handler"
+     ]
+    },
+    "MemorySize": 2048,
+    "PackageType": "Image",
+    "Role": {
+     "Fn::GetAtt": [
+      "LambdaExecutionRoleD5C26073",
+      "Arn"
+     ]
+    },
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ],
+    "Timeout": 300
+   },
+   "DependsOn": [
+    "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "LambdaExecutionRoleD5C26073"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/IngestFunction/Resource"
+   }
+  },
+  "IngestFunctionLogRetention6453669D": {
+   "Type": "Custom::LogRetention",
+   "Properties": {
+    "ServiceToken": {
+     "Fn::GetAtt": [
+      "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aFD4BFC8A",
+      "Arn"
+     ]
+    },
+    "LogGroupName": {
+     "Fn::Join": [
+      "",
+      [
+       "/aws/lambda/",
+       {
+        "Ref": "IngestFunction4B2F2EB2"
+       }
+      ]
+     ]
+    },
+    "RetentionInDays": 7
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/IngestFunction/LogRetention/Resource"
+   }
+  },
+  "HealthFunction19D7724A": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ZipFile": "\nimport json\nimport os\n\ndef handler(event, context):\n    # 获取CORS配置\n    allow_origins = os.environ.get('CORS_ALLOW_ORIGINS', '*')\n    allow_methods = os.environ.get('CORS_ALLOW_METHODS', 'GET,OPTIONS')\n    allow_headers = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type')\n    \n    return {\n        'statusCode': 200,\n        'headers': {\n            'Content-Type': 'application/json',\n            'Access-Control-Allow-Origin': allow_origins,\n            'Access-Control-Allow-Methods': allow_methods,\n            'Access-Control-Allow-Headers': allow_headers\n        },\n        'body': json.dumps({\n            'status': 'healthy',\n            'service': 'rag-api',\n            'timestamp': context.aws_request_id\n        })\n    }\n            "
+    },
+    "Description": "健康检查函数",
+    "Environment": {
+     "Variables": {
+      "S3_BUCKET": {
+       "Fn::ImportValue": "RAG-Data-prod:ExportsOutputRefDocumentBucketAE41E5A9880EA18D"
+      },
+      "BEDROCK_MODEL_ID": "amazon.nova-pro-v1:0",
+      "EMBEDDING_MODEL_ID": "amazon.titan-embed-text-v1",
+      "ZILLIZ_ENDPOINT": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+      "ZILLIZ_TOKEN": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115",
+      "ZILLIZ_COLLECTION": "rag_collection",
+      "PYTHONPATH": "/var/task",
+      "CORS_ALLOW_ORIGINS": "*",
+      "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+      "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+     }
+    },
+    "Handler": "index.handler",
+    "MemorySize": 128,
+    "Role": {
+     "Fn::GetAtt": [
+      "LambdaExecutionRoleD5C26073",
+      "Arn"
+     ]
+    },
+    "Runtime": "python3.9",
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ],
+    "Timeout": 5
+   },
+   "DependsOn": [
+    "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "LambdaExecutionRoleD5C26073"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/HealthFunction/Resource"
+   }
+  },
+  "HealthFunctionLogRetentionC7891B18": {
+   "Type": "Custom::LogRetention",
+   "Properties": {
+    "ServiceToken": {
+     "Fn::GetAtt": [
+      "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aFD4BFC8A",
+      "Arn"
+     ]
+    },
+    "LogGroupName": {
+     "Fn::Join": [
+      "",
+      [
+       "/aws/lambda/",
+       {
+        "Ref": "HealthFunction19D7724A"
+       }
+      ]
+     ]
+    },
+    "RetentionInDays": 7
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/HealthFunction/LogRetention/Resource"
+   }
+  },
+  "RagApiDA20095C": {
+   "Type": "AWS::ApiGateway::RestApi",
+   "Properties": {
+    "Description": "RAG应用API V2",
+    "Name": "rag-api-prod",
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Resource"
+   }
+  },
+  "RagApiDeploymentF0C2F69745d1dc0d7456643161ce3ebd001f73ea": {
+   "Type": "AWS::ApiGateway::Deployment",
+   "Properties": {
+    "Description": "RAG应用API V2",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "DependsOn": [
+    "RagApidocumentsproxyDELETE1FDCC6F5",
+    "RagApidocumentsproxyOPTIONSC06399FB",
+    "RagApidocumentsproxyD2218942",
+    "RagApidocumentsGET33A3316B",
+    "RagApidocumentsOPTIONSD8DD2804",
+    "RagApidocumentsPOST53EC14E4",
+    "RagApidocumentsF1E1EF00",
+    "RagApihealthGETA140D138",
+    "RagApihealthOPTIONSC415AEDF",
+    "RagApihealth5A7F792F",
+    "RagApiOPTIONSB0A357B5",
+    "RagApiqueryOPTIONSB632B444",
+    "RagApiqueryPOST61F1CD4F",
+    "RagApiquery835A1EE8",
+    "RagApisearchOPTIONS8D492A60",
+    "RagApisearchPOST5DB3DD35",
+    "RagApisearchF16A6584",
+    "RagApistatsGET53EAD069",
+    "RagApistatsOPTIONSD96F48DB",
+    "RagApistats27511A80"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Deployment/Resource",
+    "aws:cdk:do-not-refactor": true
+   }
+  },
+  "RagApiDeploymentStageprodF300773B": {
+   "Type": "AWS::ApiGateway::Stage",
+   "Properties": {
+    "DeploymentId": {
+     "Ref": "RagApiDeploymentF0C2F69745d1dc0d7456643161ce3ebd001f73ea"
+    },
+    "MethodSettings": [
+     {
+      "DataTraceEnabled": true,
+      "HttpMethod": "*",
+      "LoggingLevel": "INFO",
+      "MetricsEnabled": true,
+      "ResourcePath": "/*",
+      "ThrottlingBurstLimit": 200,
+      "ThrottlingRateLimit": 100
+     }
+    ],
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    },
+    "StageName": "prod",
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/DeploymentStage.prod/Resource"
+   }
+  },
+  "RagApiOPTIONSB0A357B5": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Fn::GetAtt": [
+      "RagApiDA20095C",
+      "RootResourceId"
+     ]
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/OPTIONS/Resource"
+   }
+  },
+  "RagApihealth5A7F792F": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Fn::GetAtt": [
+      "RagApiDA20095C",
+      "RootResourceId"
+     ]
+    },
+    "PathPart": "health",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/health/Resource"
+   }
+  },
+  "RagApihealthOPTIONSC415AEDF": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "RagApihealth5A7F792F"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/health/OPTIONS/Resource"
+   }
+  },
+  "RagApihealthGETApiPermissionRAGAPIprodRagApiEA9262F2GEThealthA4E333C3": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "HealthFunction19D7724A",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/GET/health"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/health/GET/ApiPermission.RAGAPIprodRagApiEA9262F2.GET..health"
+   }
+  },
+  "RagApihealthGETApiPermissionTestRAGAPIprodRagApiEA9262F2GEThealth9A7D8977": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "HealthFunction19D7724A",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/GET/health"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/health/GET/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.GET..health"
+   }
+  },
+  "RagApihealthGETA140D138": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "GET",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "HealthFunction19D7724A",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApihealth5A7F792F"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/health/GET/Resource"
+   }
+  },
+  "RagApiquery835A1EE8": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Fn::GetAtt": [
+      "RagApiDA20095C",
+      "RootResourceId"
+     ]
+    },
+    "PathPart": "query",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/query/Resource"
+   }
+  },
+  "RagApiqueryOPTIONSB632B444": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "RagApiquery835A1EE8"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/query/OPTIONS/Resource"
+   }
+  },
+  "RagApiqueryPOSTApiPermissionRAGAPIprodRagApiEA9262F2POSTqueryCB215BC6": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "QueryFunctionBDF4DE5B",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/POST/query"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/query/POST/ApiPermission.RAGAPIprodRagApiEA9262F2.POST..query"
+   }
+  },
+  "RagApiqueryPOSTApiPermissionTestRAGAPIprodRagApiEA9262F2POSTquery44E93D2C": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "QueryFunctionBDF4DE5B",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/POST/query"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/query/POST/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.POST..query"
+   }
+  },
+  "RagApiqueryPOST61F1CD4F": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "POST",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "TimeoutInMillis": 29000,
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "QueryFunctionBDF4DE5B",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApiquery835A1EE8"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/query/POST/Resource"
+   }
+  },
+  "RagApidocumentsF1E1EF00": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Fn::GetAtt": [
+      "RagApiDA20095C",
+      "RootResourceId"
+     ]
+    },
+    "PathPart": "documents",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/Resource"
+   }
+  },
+  "RagApidocumentsOPTIONSD8DD2804": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "RagApidocumentsF1E1EF00"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/OPTIONS/Resource"
+   }
+  },
+  "RagApidocumentsPOSTApiPermissionRAGAPIprodRagApiEA9262F2POSTdocuments12F1E953": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IngestFunction4B2F2EB2",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/POST/documents"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/POST/ApiPermission.RAGAPIprodRagApiEA9262F2.POST..documents"
+   }
+  },
+  "RagApidocumentsPOSTApiPermissionTestRAGAPIprodRagApiEA9262F2POSTdocuments60A4DBB8": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IngestFunction4B2F2EB2",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/POST/documents"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/POST/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.POST..documents"
+   }
+  },
+  "RagApidocumentsPOST53EC14E4": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "POST",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "TimeoutInMillis": 29000,
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "IngestFunction4B2F2EB2",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApidocumentsF1E1EF00"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/POST/Resource"
+   }
+  },
+  "RagApidocumentsGETApiPermissionRAGAPIprodRagApiEA9262F2GETdocumentsC8664BB5": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ListDocsFunction22D59F26",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/GET/documents"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/GET/ApiPermission.RAGAPIprodRagApiEA9262F2.GET..documents"
+   }
+  },
+  "RagApidocumentsGETApiPermissionTestRAGAPIprodRagApiEA9262F2GETdocumentsE410065D": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ListDocsFunction22D59F26",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/GET/documents"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/GET/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.GET..documents"
+   }
+  },
+  "RagApidocumentsGET33A3316B": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "GET",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "ListDocsFunction22D59F26",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApidocumentsF1E1EF00"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/GET/Resource"
+   }
+  },
+  "RagApidocumentsproxyD2218942": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Ref": "RagApidocumentsF1E1EF00"
+    },
+    "PathPart": "{proxy+}",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/{proxy+}/Resource"
+   }
+  },
+  "RagApidocumentsproxyOPTIONSC06399FB": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "RagApidocumentsproxyD2218942"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/{proxy+}/OPTIONS/Resource"
+   }
+  },
+  "RagApidocumentsproxyDELETEApiPermissionRAGAPIprodRagApiEA9262F2DELETEdocumentsproxy7C1CAF6A": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "DeleteDocFunctionE3E59255",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/DELETE/documents/*"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/{proxy+}/DELETE/ApiPermission.RAGAPIprodRagApiEA9262F2.DELETE..documents.{proxy+}"
+   }
+  },
+  "RagApidocumentsproxyDELETEApiPermissionTestRAGAPIprodRagApiEA9262F2DELETEdocumentsproxyE1A0E2A1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "DeleteDocFunctionE3E59255",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/DELETE/documents/*"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/{proxy+}/DELETE/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.DELETE..documents.{proxy+}"
+   }
+  },
+  "RagApidocumentsproxyDELETE1FDCC6F5": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "DELETE",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "DeleteDocFunctionE3E59255",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApidocumentsproxyD2218942"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/documents/{proxy+}/DELETE/Resource"
+   }
+  },
+  "RagApisearchF16A6584": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Fn::GetAtt": [
+      "RagApiDA20095C",
+      "RootResourceId"
+     ]
+    },
+    "PathPart": "search",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/search/Resource"
+   }
+  },
+  "RagApisearchOPTIONS8D492A60": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "RagApisearchF16A6584"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/search/OPTIONS/Resource"
+   }
+  },
+  "RagApisearchPOSTApiPermissionRAGAPIprodRagApiEA9262F2POSTsearchA9105D54": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "QueryFunctionBDF4DE5B",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/POST/search"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/search/POST/ApiPermission.RAGAPIprodRagApiEA9262F2.POST..search"
+   }
+  },
+  "RagApisearchPOSTApiPermissionTestRAGAPIprodRagApiEA9262F2POSTsearchE9186A8C": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "QueryFunctionBDF4DE5B",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/POST/search"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/search/POST/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.POST..search"
+   }
+  },
+  "RagApisearchPOST5DB3DD35": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "POST",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "QueryFunctionBDF4DE5B",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApisearchF16A6584"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/search/POST/Resource"
+   }
+  },
+  "RagApistats27511A80": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Fn::GetAtt": [
+      "RagApiDA20095C",
+      "RootResourceId"
+     ]
+    },
+    "PathPart": "stats",
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/stats/Resource"
+   }
+  },
+  "RagApistatsOPTIONSD96F48DB": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'",
+        "method.response.header.Access-Control-Max-Age": "'3600'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true,
+       "method.response.header.Access-Control-Max-Age": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "RagApistats27511A80"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/stats/OPTIONS/Resource"
+   }
+  },
+  "RagApistatsGETApiPermissionRAGAPIprodRagApiEA9262F2GETstatsF162191C": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "StatsFunctionE4A6FC3A",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/",
+       {
+        "Ref": "RagApiDeploymentStageprodF300773B"
+       },
+       "/GET/stats"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/stats/GET/ApiPermission.RAGAPIprodRagApiEA9262F2.GET..stats"
+   }
+  },
+  "RagApistatsGETApiPermissionTestRAGAPIprodRagApiEA9262F2GETstats6181904B": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "StatsFunctionE4A6FC3A",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:aws:execute-api:us-east-1:375004070918:",
+       {
+        "Ref": "RagApiDA20095C"
+       },
+       "/test-invoke-stage/GET/stats"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/stats/GET/ApiPermission.Test.RAGAPIprodRagApiEA9262F2.GET..stats"
+   }
+  },
+  "RagApistatsGET53EAD069": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "GET",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "StatsFunctionE4A6FC3A",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "RagApistats27511A80"
+    },
+    "RestApiId": {
+     "Ref": "RagApiDA20095C"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/RagApi/Default/stats/GET/Resource"
+   }
+  },
+  "ListDocsFunction22D59F26": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ZipFile": "\nimport json\nimport boto3\nimport os\n\ndef handler(event, context):\n    try:\n        s3 = boto3.client('s3')\n        bucket = os.environ.get('S3_BUCKET', '')\n        \n        # 列出文档\n        response = s3.list_objects_v2(\n            Bucket=bucket,\n            Prefix='documents/',\n            MaxKeys=100\n        )\n        \n        files = []\n        if 'Contents' in response:\n            files = [\n                {\n                    'name': obj['Key'].replace('documents/', ''),\n                    'size': obj['Size'],\n                    'modified': obj['LastModified'].isoformat()\n                }\n                for obj in response['Contents']\n            ]\n        \n        return {\n            'statusCode': 200,\n            'headers': {\n                'Content-Type': 'application/json',\n                'Access-Control-Allow-Origin': os.environ.get('CORS_ALLOW_ORIGINS', '*'),\n                'Access-Control-Allow-Methods': os.environ.get('CORS_ALLOW_METHODS', 'GET,OPTIONS'),\n                'Access-Control-Allow-Headers': os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type')\n            },\n            'body': json.dumps({'documents': files})\n        }\n    except Exception as e:\n        return {\n            'statusCode': 500,\n            'headers': {\n                'Content-Type': 'application/json',\n                'Access-Control-Allow-Origin': '*'\n            },\n            'body': json.dumps({'error': str(e)})\n        }\n                    "
+    },
+    "Environment": {
+     "Variables": {
+      "S3_BUCKET": {
+       "Fn::ImportValue": "RAG-Data-prod:ExportsOutputRefDocumentBucketAE41E5A9880EA18D"
+      },
+      "BEDROCK_MODEL_ID": "amazon.nova-pro-v1:0",
+      "EMBEDDING_MODEL_ID": "amazon.titan-embed-text-v1",
+      "ZILLIZ_ENDPOINT": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+      "ZILLIZ_TOKEN": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115",
+      "ZILLIZ_COLLECTION": "rag_collection",
+      "PYTHONPATH": "/var/task",
+      "CORS_ALLOW_ORIGINS": "*",
+      "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+      "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+     }
+    },
+    "Handler": "index.handler",
+    "MemorySize": 256,
+    "Role": {
+     "Fn::GetAtt": [
+      "LambdaExecutionRoleD5C26073",
+      "Arn"
+     ]
+    },
+    "Runtime": "python3.9",
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ],
+    "Timeout": 10
+   },
+   "DependsOn": [
+    "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "LambdaExecutionRoleD5C26073"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/ListDocsFunction/Resource"
+   }
+  },
+  "DeleteDocFunctionE3E59255": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ZipFile": "\nimport json\nimport boto3\nimport os\n\ndef handler(event, context):\n    # 获取CORS配置\n    allow_origins = os.environ.get('CORS_ALLOW_ORIGINS', '*')\n    allow_methods = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS')\n    allow_headers = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type')\n    \n    cors_headers = {\n        'Access-Control-Allow-Origin': allow_origins,\n        'Access-Control-Allow-Methods': allow_methods,\n        'Access-Control-Allow-Headers': allow_headers\n    }\n    \n    try:\n        path_params = event.get('pathParameters', {})\n        doc_path = path_params.get('proxy', '')\n        \n        if not doc_path:\n            return {\n                'statusCode': 400,\n                'headers': {**cors_headers, 'Content-Type': 'application/json'},\n                'body': json.dumps({'error': 'Document path is required'})\n            }\n        \n        s3 = boto3.client('s3')\n        bucket = os.environ.get('S3_BUCKET', '')\n        s3_key = f\"documents/{doc_path}\" if not doc_path.startswith('documents/') else doc_path\n        \n        s3.delete_object(Bucket=bucket, Key=s3_key)\n        \n        # Try to delete embeddings\n        try:\n            embeddings_key = s3_key.replace('documents/', 'embeddings/') + '.json'\n            s3.delete_object(Bucket=bucket, Key=embeddings_key)\n        except:\n            pass\n        \n        return {\n            'statusCode': 200,\n            'headers': {**cors_headers, 'Content-Type': 'application/json'},\n            'body': json.dumps({\n                'status': 'success',\n                'message': 'Document deleted successfully',\n                'document': doc_path,\n                'zilliz_deleted': False  # Not supported in fallback mode\n            })\n        }\n        \n    except Exception as e:\n        return {\n            'statusCode': 500,\n            'headers': {**cors_headers, 'Content-Type': 'application/json'},\n            'body': json.dumps({\n                'status': 'error',\n                'error': str(e),\n                'message': 'Failed to delete document'\n            })\n        }\n                "
+    },
+    "Description": "删除文档函数(基础版本)",
+    "Environment": {
+     "Variables": {
+      "S3_BUCKET": {
+       "Fn::ImportValue": "RAG-Data-prod:ExportsOutputRefDocumentBucketAE41E5A9880EA18D"
+      },
+      "BEDROCK_MODEL_ID": "amazon.nova-pro-v1:0",
+      "EMBEDDING_MODEL_ID": "amazon.titan-embed-text-v1",
+      "ZILLIZ_ENDPOINT": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+      "ZILLIZ_TOKEN": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115",
+      "ZILLIZ_COLLECTION": "rag_collection",
+      "PYTHONPATH": "/var/task",
+      "CORS_ALLOW_ORIGINS": "*",
+      "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+      "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+     }
+    },
+    "Handler": "index.handler",
+    "MemorySize": 256,
+    "Role": {
+     "Fn::GetAtt": [
+      "LambdaExecutionRoleD5C26073",
+      "Arn"
+     ]
+    },
+    "Runtime": "python3.9",
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ],
+    "Timeout": 10
+   },
+   "DependsOn": [
+    "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "LambdaExecutionRoleD5C26073"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/DeleteDocFunction/Resource"
+   }
+  },
+  "DeleteDocFunctionLogRetention7E7A34D5": {
+   "Type": "Custom::LogRetention",
+   "Properties": {
+    "ServiceToken": {
+     "Fn::GetAtt": [
+      "LogRetentionaae0aa3c5b4d4f87b02d85b201efdd8aFD4BFC8A",
+      "Arn"
+     ]
+    },
+    "LogGroupName": {
+     "Fn::Join": [
+      "",
+      [
+       "/aws/lambda/",
+       {
+        "Ref": "DeleteDocFunctionE3E59255"
+       }
+      ]
+     ]
+    },
+    "RetentionInDays": 7
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/DeleteDocFunction/LogRetention/Resource"
+   }
+  },
+  "StatsFunctionE4A6FC3A": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ZipFile": "\nimport json\nimport os\n\ndef handler(event, context):\n    # 返回默认统计信息\n    stats = {\n        'documents': 0,\n        'vectors': 0,\n        'dimension': 1536,\n        'collection': os.environ.get('ZILLIZ_COLLECTION', 'rag_collection'),\n        'status': 'operational'\n    }\n    \n    return {\n        'statusCode': 200,\n        'headers': {\n            'Content-Type': 'application/json',\n            'Access-Control-Allow-Origin': os.environ.get('CORS_ALLOW_ORIGINS', '*'),\n            'Access-Control-Allow-Methods': os.environ.get('CORS_ALLOW_METHODS', 'GET,OPTIONS'),\n            'Access-Control-Allow-Headers': os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type')\n        },\n        'body': json.dumps(stats)\n    }\n                "
+    },
+    "Environment": {
+     "Variables": {
+      "S3_BUCKET": {
+       "Fn::ImportValue": "RAG-Data-prod:ExportsOutputRefDocumentBucketAE41E5A9880EA18D"
+      },
+      "BEDROCK_MODEL_ID": "amazon.nova-pro-v1:0",
+      "EMBEDDING_MODEL_ID": "amazon.titan-embed-text-v1",
+      "ZILLIZ_ENDPOINT": "https://in03-a9b3b5529895a3d.serverless.aws-eu-central-1.cloud.zilliz.com",
+      "ZILLIZ_TOKEN": "88c6ee3f3abf448278a1e30d5b951517645207f1fa94daeec7fc7b7e4b47fbaeb2bc953e5d1ccb2e94749f8f3992955310026115",
+      "ZILLIZ_COLLECTION": "rag_collection",
+      "PYTHONPATH": "/var/task",
+      "CORS_ALLOW_ORIGINS": "*",
+      "CORS_ALLOW_METHODS": "GET,POST,PUT,DELETE,OPTIONS",
+      "CORS_ALLOW_HEADERS": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+     }
+    },
+    "Handler": "index.handler",
+    "MemorySize": 128,
+    "Role": {
+     "Fn::GetAtt": [
+      "LambdaExecutionRoleD5C26073",
+      "Arn"
+     ]
+    },
+    "Runtime": "python3.9",
+    "Tags": [
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Project",
+      "Value": "RAG"
+     },
+     {
+      "Key": "Stage",
+      "Value": "prod"
+     },
+     {
+      "Key": "Version",
+      "Value": "V2"
+     }
+    ],
+    "Timeout": 5
+   },
+   "DependsOn": [
+    "LambdaExecutionRoleDefaultPolicy6D69732F",
+    "LambdaExecutionRoleD5C26073"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/StatsFunction/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/22PQWvDMAyFf0vvjta1UNix3dhpYyH9AcV1tEyNY4dIpoSQ/z7byaCHnfS998RD2sHueQvbjb5zYeq2sHSF6SzatCpal4l0B1PlLarXb5dn6S2ZMcmFZoVmgAp7zyR+GE+aUVndXWsN03twRsi7tP7IJQ4dMUc1K+sbhg/fVCjo8gLvL5oZheGYRtRwCqZFyd26p0YL3vUYL0OWY0/5uBXfsLd+7GJVch9U/KrJbywQ930YDObOT5QfX6dwpb90bc48z//aKh+ZSsk1KfgK0geZVTnGKve0hxc4bG5MVAwhPtghVMv8BSjtzMx9AQAA"
+   },
+   "Metadata": {
+    "aws:cdk:path": "RAG-API-prod/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "RagApiEndpointB6AED592": {
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "https://",
+      {
+       "Ref": "RagApiDA20095C"
+      },
+      ".execute-api.us-east-1.",
+      {
+       "Ref": "AWS::URLSuffix"
+      },
+      "/",
+      {
+       "Ref": "RagApiDeploymentStageprodF300773B"
+      },
+      "/"
+     ]
+    ]
+   }
+  },
+  "ApiUrl": {
+   "Description": "API Gateway URL",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "https://",
+      {
+       "Ref": "RagApiDA20095C"
+      },
+      ".execute-api.us-east-1.",
+      {
+       "Ref": "AWS::URLSuffix"
+      },
+      "/",
+      {
+       "Ref": "RagApiDeploymentStageprodF300773B"
+      },
+      "/"
+     ]
+    ]
+   },
+   "Export": {
+    "Name": "RAG-API-prod-ApiUrl"
+   }
+  },
+  "ApiId": {
+   "Description": "API Gateway ID",
+   "Value": {
+    "Ref": "RagApiDA20095C"
+   },
+   "Export": {
+    "Name": "RAG-API-prod-ApiId"
+   }
+  },
+  "QueryFunctionArn": {
+   "Description": "Query Lambda Function ARN",
+   "Value": {
+    "Fn::GetAtt": [
+     "QueryFunctionBDF4DE5B",
+     "Arn"
+    ]
+   }
+  },
+  "QueryFunctionName": {
+   "Description": "Query Lambda Function Name",
+   "Value": {
+    "Ref": "QueryFunctionBDF4DE5B"
+   },
+   "Export": {
+    "Name": "RAG-API-prod-QueryFunctionName"
+   }
+  },
+  "IngestFunctionArn": {
+   "Description": "Ingest Lambda Function ARN",
+   "Value": {
+    "Fn::GetAtt": [
+     "IngestFunction4B2F2EB2",
+     "Arn"
+    ]
+   }
+  },
+  "IngestFunctionName": {
+   "Description": "Ingest Lambda Function Name",
+   "Value": {
+    "Ref": "IngestFunction4B2F2EB2"
+   },
+   "Export": {
+    "Name": "RAG-API-prod-IngestFunctionName"
+   }
+  },
+  "ExportsOutputRefRagApiDA20095C1B4F0205": {
+   "Value": {
+    "Ref": "RagApiDA20095C"
+   },
+   "Export": {
+    "Name": "RAG-API-prod:ExportsOutputRefRagApiDA20095C1B4F0205"
+   }
+  },
+  "ExportsOutputRefRagApiDeploymentStageprodF300773B9256974A": {
+   "Value": {
+    "Ref": "RagApiDeploymentStageprodF300773B"
+   },
+   "Export": {
+    "Name": "RAG-API-prod:ExportsOutputRefRagApiDeploymentStageprodF300773B9256974A"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}
