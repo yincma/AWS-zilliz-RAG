@@ -535,7 +535,23 @@ def handler(event, context):
         
         CfnOutput(
             self,
+            "QueryFunctionName",
+            value=query_function.function_name,
+            description="Query Lambda Function Name",
+            export_name=f"{self.stack_name}-QueryFunctionName"
+        )
+        
+        CfnOutput(
+            self,
             "IngestFunctionArn",
             value=ingest_function.function_arn,
             description="Ingest Lambda Function ARN"
+        )
+        
+        CfnOutput(
+            self,
+            "IngestFunctionName",
+            value=ingest_function.function_name,
+            description="Ingest Lambda Function Name",
+            export_name=f"{self.stack_name}-IngestFunctionName"
         )
